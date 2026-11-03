@@ -1,0 +1,41 @@
+# Each directory under workloads/ becomes an application and a namespace.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: workloads
+  namespace: argocd
+spec:
+  generators:
+    - git:
+        repoURL: {{ .Values.repoURL }}
+        revision: {{ .Values.targetRevision }}
+        directories:
+          - path: workloads/*
+  template:
+    metadata:
+      name: 'workload-{{ "{{path.basename}}" }}'
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: default
+      source:
+        repoURL: {{ .Values.repoURL }}
+        targetRevision: {{ .Values.targetRevision }}
+        path: '{{ "{{path}}" }}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{ "{{path.basename}}" }}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          # The WebService CRD appears once the platform API has synced.
+          - SkipDryRunOnMissingResource=true
+        retry:
+          limit: 20
+          backoff:
+            duration: 15s
+            factor: 2
+            maxDuration: 2m

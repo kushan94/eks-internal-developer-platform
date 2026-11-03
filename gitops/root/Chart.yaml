@@ -1,0 +1,4 @@
+apiVersion: v2
+name: root
+description: Argo CD applications that make up the platform
+version: 0.1.0

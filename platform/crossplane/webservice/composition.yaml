@@ -1,0 +1,58 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: webservice
+spec:
+  compositeTypeRef:
+    apiVersion: platform.example.org/v1alpha1
+    kind: WebService
+  mode: Pipeline
+  pipeline:
+    - step: render
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            {{- $xr := .observed.composite.resource }}
+            {{- $name := $xr.metadata.name }}
+            {{- $available := dig "deployment" "resource" "status" "availableReplicas" 0 (default dict .observed.resources) }}
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: {{ $name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: deployment
+                gotemplating.fn.crossplane.io/ready: {{ if ge (int $available) (int $xr.spec.replicas) }}"True"{{ else }}"False"{{ end }}
+            spec:
+              replicas: {{ $xr.spec.replicas }}
+              selector:
+                matchLabels:
+                  app.kubernetes.io/name: {{ $name }}
+              template:
+                metadata:
+                  labels:
+                    app.kubernetes.io/name: {{ $name }}
+                spec:
+                  containers:
+                    - name: app
+                      image: {{ $xr.spec.image }}
+                      ports:
+                        - containerPort: {{ $xr.spec.port }}
+            ---
+            apiVersion: v1
+            kind: Service
+            metadata:
+              name: {{ $name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: service
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              selector:
+                app.kubernetes.io/name: {{ $name }}
+              ports:
+                - port: 80
+                  targetPort: {{ $xr.spec.port }}

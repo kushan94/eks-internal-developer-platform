@@ -1,0 +1,2 @@
+region        = "us-east-1"
+allowed_cidrs = ["203.0.113.10/32"] # Replace with your own IP

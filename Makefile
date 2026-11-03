@@ -1,0 +1,47 @@
+CLUSTER ?= idp-local
+KUBE_CONTEXT ?= kind-$(CLUSTER)
+KUBECTL = kubectl --context $(KUBE_CONTEXT)
+ARGOCD_CHART_VERSION ?= 10.11.6
+GIT_IMAGE ?= alpine/git:v2.54.0
+GIT_CONTAINER ?= idp-git
+# Argo CD reads committed changes from here. Override it to use a hosted repo.
+REPO_URL ?= git://$(GIT_CONTAINER)/eks-idp
+TF_IMAGE ?= hashicorp/terraform:latest
+TF_RUN = docker run --rm -v $(CURDIR)/infra/terraform:/workspace -w /workspace $(TF_IMAGE)
+
+.PHONY: local-up local-down cluster argocd local-git gitops demo status tf-validate
+
+local-up: cluster argocd local-git gitops ## Create the kind cluster and hand the platform to Argo CD
+
+local-down: ## Delete the kind cluster and local Git server
+	-docker rm -f $(GIT_CONTAINER)
+	kind delete cluster --name $(CLUSTER)
+
+cluster:
+	kind get clusters | grep -qx $(CLUSTER) || kind create cluster --name $(CLUSTER)
+
+argocd:
+	helm repo add argo https://argoproj.github.io/argo-helm --force-update
+	helm upgrade --install argocd argo/argo-cd --version $(ARGOCD_CHART_VERSION) \
+		--namespace argocd --create-namespace --wait --kube-context $(KUBE_CONTEXT)
+
+local-git: ## Serve this repo's commits to Argo CD over the kind network
+	-docker rm -f $(GIT_CONTAINER)
+	docker run -d --name $(GIT_CONTAINER) --network kind -v $(CURDIR):/srv/eks-idp:ro $(GIT_IMAGE) \
+		-c safe.directory='*' daemon --base-path=/srv --export-all --reuseaddr /srv/eks-idp
+
+gitops: ## Apply the root application
+	sed 's|REPO_URL|$(REPO_URL)|' gitops/root-app.yaml | $(KUBECTL) apply -f -
+
+demo: ## Wait for Argo CD to deliver the example WebService
+	for i in $$(seq 1 60); do $(KUBECTL) -n demo get webservice hello >/dev/null 2>&1 && break; sleep 5; done
+	$(KUBECTL) -n demo wait webservice hello --for=condition=Ready --timeout=300s
+	$(KUBECTL) -n demo get webservice,deployment,service
+
+status: ## Show Argo CD applications
+	$(KUBECTL) -n argocd get applications
+
+tf-validate: ## Check the Terraform without touching AWS
+	$(TF_RUN) init -backend=false -input=false
+	$(TF_RUN) fmt -check
+	$(TF_RUN) validate
