@@ -9,7 +9,7 @@ REPO_URL ?= git://$(shell docker inspect -f '{{.NetworkSettings.Networks.kind.IP
 TF_IMAGE ?= hashicorp/terraform:latest
 TF_RUN = docker run --rm -v $(CURDIR)/infra/terraform:/workspace -w /workspace $(TF_IMAGE)
 
-.PHONY: local-up local-down cluster argocd local-git gitops demo status tf-validate
+.PHONY: local-up local-down cluster argocd local-git gitops demo status backstage tf-validate
 
 local-up: cluster argocd local-git gitops ## Create the kind cluster and hand the platform to Argo CD
 
@@ -42,6 +42,9 @@ demo: ## Wait for Argo CD to deliver the example WebService
 
 status: ## Show Argo CD applications
 	$(KUBECTL) -n argocd get applications
+
+backstage: ## Run Backstage locally, using your GitHub CLI login to open pull requests
+	cd backstage && GITHUB_TOKEN=$$(gh auth token) yarn start
 
 tf-validate: ## Check the Terraform without touching AWS
 	$(TF_RUN) init -backend=false -input=false

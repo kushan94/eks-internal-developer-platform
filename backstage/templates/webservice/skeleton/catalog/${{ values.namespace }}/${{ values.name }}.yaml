@@ -1,0 +1,13 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: ${{ values.namespace }}-${{ values.name }}
+  title: ${{ values.name }}
+  description: WebService in the ${{ values.namespace }} namespace
+  annotations:
+    github.com/project-slug: kushan94/eks-internal-developer-platform
+    argocd/app-name: workload-${{ values.namespace }}
+spec:
+  type: service
+  lifecycle: experimental
+  owner: group:default/guests
