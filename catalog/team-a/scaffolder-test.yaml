@@ -1,0 +1,13 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: team-a-scaffolder-test
+  title: scaffolder-test
+  description: WebService in the team-a namespace
+  annotations:
+    github.com/project-slug: kushan94/eks-internal-developer-platform
+    argocd/app-name: workload-team-a
+spec:
+  type: service
+  lifecycle: experimental
+  owner: group:default/guests

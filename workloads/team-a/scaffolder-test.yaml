@@ -1,0 +1,8 @@
+apiVersion: platform.example.org/v1alpha1
+kind: WebService
+metadata:
+  name: scaffolder-test
+spec:
+  image: nginxinc/nginx-unprivileged:1.29-alpine
+  port: 8080
+  replicas: 2
