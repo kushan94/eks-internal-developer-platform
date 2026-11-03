@@ -22,3 +22,13 @@ Copy this for each session:
   - Pods can't resolve Docker container names on the kind network, so Argo CD uses the Git server's IP address.
   - A test `git commit -a` swept up uncommitted Makefile fixes, and deleting the test branch removed them. `git reflog` recovered them.
 - **AWS cost:** $0
+
+### 2026-11-03: Backstage template
+- **Goal:** Let a developer fill in a form and get a pull request that deploys a service.
+- **What happened:** The template opened a real pull request. Argo CD deployed that branch on a fresh cluster, and the service returned HTTP 200.
+- **What surprised me:**
+  - Argo CD applies every YAML file in a workload folder, so Backstage catalog files had to live in a separate `catalog/` folder.
+  - A free-text namespace field would let anyone request a service in `kube-system`, so the form now rejects system namespaces. Pull request review is still the real control.
+  - Commits made through the GitHub API can carry a personal email, so `scaffolder.defaultAuthor` is set to a noreply address.
+- **AWS cost:** $0
+
