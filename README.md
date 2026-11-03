@@ -89,3 +89,6 @@ Latest releases checked on 2026-11-03. Only the first five rows are used so far,
 - [ADR 0002: Self-host Backstage](docs/adr/0002-self-host-backstage.md)
 - [ADR 0003: Build locally first and keep EKS ephemeral](docs/adr/0003-local-first-ephemeral-eks.md)
 - [ADR 0004: Structure GitOps with a root application](docs/adr/0004-gitops-structure.md)
+
+## License
+[MIT](LICENSE)
