@@ -8,10 +8,13 @@ A study project that builds an internal developer platform on Amazon EKS with Cr
 Requires Docker, kind, kubectl and Helm. This runs locally and does not use AWS.
 
 ```sh
-make local-up    # Create the cluster and install the platform
-make demo        # Request a WebService and wait for it to become ready
-make local-down  # Delete the cluster
+make local-up    # Create the cluster, then let Argo CD install the platform from Git
+make demo        # Wait for the example WebService in workloads/demo
+make status      # Show the Argo CD applications
+make local-down  # Delete the cluster and local Git server
 ```
+
+`make local-up` switches your active `kubectl` context to `kind-idp-local` and leaves it there. The Makefile always targets that cluster, but check your context before running your own commands.
 
 A developer only has to write this to get a Deployment and a Service:
 
@@ -20,16 +23,35 @@ apiVersion: platform.example.org/v1alpha1
 kind: WebService
 metadata:
   name: hello
-  namespace: demo
 spec:
   image: nginxinc/nginx-unprivileged:1.29-alpine
   port: 8080
   replicas: 2
 ```
 
+## How changes are deployed
+Argo CD reads **commits**, not your working tree, so uncommitted changes have no effect. It checks for new commits about every 3 minutes.
+
+| To do this | Change this |
+|---|---|
+| Add a team or service | Add a file under `workloads/<namespace>/` |
+| Change a platform API | Edit `platform/crossplane/webservice/` |
+| Add a platform component | Add an application to `gitops/root/templates/` |
+
+Locally, Argo CD reads this repo from a Git server on the kind network and follows the branch you have checked out. To use a hosted repo instead, run `make gitops REPO_URL=https://github.com/<you>/eks-idp.git`.
+
+Deleting a folder under `workloads/` removes its application and resources, but not its namespace.
+
+## Troubleshooting
+**`kube-proxy` crash-loops with `too many open files`:** several kind nodes have exhausted the Docker VM's inotify limit. On Colima, this raises it until the next restart:
+
+```sh
+colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
+```
+
 ## Roadmap
 - [x] **1. Local core:** Crossplane, Argo CD and the `WebService` API on kind
-- [ ] **2. GitOps:** Argo CD deploys the platform and workloads from this repo
+- [x] **2. GitOps:** Argo CD deploys the platform and workloads from this repo
 - [ ] **3. Backstage:** catalog, plus a template that opens a pull request
 - [ ] **4. EKS:** the same platform on a Terraform-built cluster
 - [ ] **5. AWS resources:** add a database to `WebService` with the Crossplane AWS provider and Pod Identity
@@ -66,3 +88,4 @@ Latest releases checked on 2026-11-03. Only the first five rows are used so far,
 - [ADR 0001: Use Crossplane](docs/adr/0001-use-crossplane.md)
 - [ADR 0002: Self-host Backstage](docs/adr/0002-self-host-backstage.md)
 - [ADR 0003: Build locally first and keep EKS ephemeral](docs/adr/0003-local-first-ephemeral-eks.md)
+- [ADR 0004: Structure GitOps with a root application](docs/adr/0004-gitops-structure.md)

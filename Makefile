@@ -2,10 +2,10 @@ CLUSTER ?= idp-local
 KUBE_CONTEXT ?= kind-$(CLUSTER)
 KUBECTL = kubectl --context $(KUBE_CONTEXT)
 ARGOCD_CHART_VERSION ?= 10.11.6
-GIT_IMAGE ?= alpine/git:v2.54.0
+GIT_IMAGE ?= alpine:3.22
 GIT_CONTAINER ?= idp-git
 # Argo CD reads committed changes from here. Override it to use a hosted repo.
-REPO_URL ?= git://$(GIT_CONTAINER)/eks-idp
+REPO_URL ?= git://$(shell docker inspect -f '{{.NetworkSettings.Networks.kind.IPAddress}}' $(GIT_CONTAINER))/eks-idp
 TF_IMAGE ?= hashicorp/terraform:latest
 TF_RUN = docker run --rm -v $(CURDIR)/infra/terraform:/workspace -w /workspace $(TF_IMAGE)
 
@@ -27,8 +27,10 @@ argocd:
 
 local-git: ## Serve this repo's commits to Argo CD over the kind network
 	-docker rm -f $(GIT_CONTAINER)
-	docker run -d --name $(GIT_CONTAINER) --network kind -v $(CURDIR):/srv/eks-idp:ro $(GIT_IMAGE) \
-		-c safe.directory='*' daemon --base-path=/srv --export-all --reuseaddr /srv/eks-idp
+	docker run -d --name $(GIT_CONTAINER) --network kind -v $(CURDIR):/srv/eks-idp:ro $(GIT_IMAGE) sh -c \
+		"apk add --no-cache git-daemon && git config --global safe.directory '*' && exec git daemon --base-path=/srv --export-all --reuseaddr /srv/eks-idp"
+	for i in $$(seq 1 30); do docker exec $(GIT_CONTAINER) git ls-remote git://localhost/eks-idp HEAD >/dev/null 2>&1 && exit 0; sleep 2; done; \
+		echo "Git server did not start:"; docker logs $(GIT_CONTAINER); exit 1
 
 gitops: ## Apply the root application
 	sed 's|REPO_URL|$(REPO_URL)|' gitops/root-app.yaml | $(KUBECTL) apply -f -
