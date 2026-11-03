@@ -38,7 +38,7 @@ Argo CD reads **commits**, not your working tree, so uncommitted changes have no
 | Change a platform API | Edit `platform/crossplane/webservice/` |
 | Add a platform component | Add an application to `gitops/root/templates/` |
 
-Locally, Argo CD reads this repo from a Git server on the kind network and follows the branch you have checked out. To use a hosted repo instead, run `make gitops REPO_URL=https://github.com/<you>/eks-idp.git`.
+Locally, Argo CD reads this repo from a Git server on the kind network and follows the branch you have checked out. To use a hosted repo instead, run `make gitops REPO_URL=https://github.com/kushan94/eks-internal-developer-platform.git`.
 
 Deleting a folder under `workloads/` removes its application and resources, but not its namespace.
 
