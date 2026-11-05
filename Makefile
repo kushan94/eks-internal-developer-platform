@@ -6,10 +6,11 @@ GIT_IMAGE ?= alpine:3.22
 GIT_CONTAINER ?= idp-git
 # Argo CD reads committed changes from here. Override it to use a hosted repo.
 REPO_URL ?= git://$(shell docker inspect -f '{{.NetworkSettings.Networks.kind.IPAddress}}' $(GIT_CONTAINER))/eks-idp
+CROSSPLANE ?= crossplane
 TF_IMAGE ?= hashicorp/terraform:latest
 TF_RUN = docker run --rm -v $(CURDIR)/infra/terraform:/workspace -w /workspace $(TF_IMAGE)
 
-.PHONY: local-up local-down cluster argocd local-git gitops demo status backstage tf-validate
+.PHONY: local-up local-down cluster argocd local-git gitops demo status backstage test tf-validate
 
 local-up: cluster argocd local-git gitops ## Create the kind cluster and hand the platform to Argo CD
 
@@ -45,6 +46,17 @@ status: ## Show Argo CD applications
 
 backstage: ## Run Backstage locally, using your GitHub CLI login to open pull requests
 	cd backstage && GITHUB_TOKEN=$$(gh auth token) yarn start
+
+test: ## Render the WebService composition for both runtimes and validate it against the provider schemas
+	@rm -rf .test && mkdir -p .test/schemas
+	cp platform/crossplane/aws/providers.yaml platform/crossplane/webservice/definition.yaml .test/schemas/
+	$(CROSSPLANE) render --include-full-xr tests/render/xr-kubernetes.yaml \
+		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml > .test/kubernetes.yaml
+	$(CROSSPLANE) render --include-full-xr tests/render/xr-ecs.yaml \
+		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml \
+		--extra-resources platform/crossplane/aws/environment.example.yaml > .test/ecs.yaml
+	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/kubernetes.yaml
+	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/ecs.yaml
 
 tf-validate: ## Check the Terraform without touching AWS
 	$(TF_RUN) init -backend=false -input=false

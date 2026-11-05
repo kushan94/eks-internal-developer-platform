@@ -1,0 +1,16 @@
+# Example only. The real values identify your AWS account, so the real file is
+# generated from Terraform outputs and applied directly, not committed.
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: aws-platform
+data:
+  aws:
+    region: eu-west-1
+    ecsClusterArn: arn:aws:ecs:eu-west-1:111122223333:cluster/idp
+    vpcId: vpc-0123456789abcdef0
+    vpcCidr: 10.42.0.0/16
+    subnetIds:
+      - subnet-0123456789abcdef0
+      - subnet-0fedcba9876543210
+    taskExecutionRoleArn: arn:aws:iam::111122223333:role/idp-ecs-task-execution

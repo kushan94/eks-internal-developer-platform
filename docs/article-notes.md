@@ -32,3 +32,15 @@ Copy this for each session:
   - Commits made through the GitHub API can carry a personal email, so `scaffolder.defaultAuthor` is set to a noreply address.
 - **AWS cost:** $0
 
+### 2026-11-05: Two runtimes behind one API
+- **Goal:** Let developers choose Kubernetes or ECS Fargate in the same form.
+- **What happened:** One field, `runtime`, picks which resources the composition builds. I validated the ECS output offline against the provider schemas, without an AWS account.
+- **What surprised me:**
+  - The AWS provider's v2 resources are namespaced (`ecs.aws.m.upbound.io`), and some fields differ from older examples. For instance, `networkConfiguration` is an object, not a list.
+  - Reading the provider's schemas first was faster than writing YAML from memory and fixing errors one by one.
+  - `crossplane render` and `crossplane resource validate` test compositions without a cluster or cloud account. A deliberately broken field confirmed the validation really catches mistakes.
+- **Mistakes and fixes:**
+  - Storing commands in zsh variables broke test scripts twice, because zsh doesn't split them into words. Shell functions work instead.
+  - The Crossplane CLI moved to its own repo and download host from v2.3, so older install instructions point to missing files.
+- **AWS cost:** $0
+
