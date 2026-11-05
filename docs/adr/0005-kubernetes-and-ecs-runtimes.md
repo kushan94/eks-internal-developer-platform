@@ -17,4 +17,4 @@ Kubernetes suits teams that want its ecosystem, but ECS Fargate is simpler to ru
 - Every new feature, such as databases, public URLs and metrics, has to be built for both runtimes.
 - Kubernetes services get internal DNS names, but ECS services don't until ECS Service Connect or a load balancer is added.
 - An ECS service is marked ready once AWS has created it, not once its tasks are running.
-- ECS needs AWS credentials, so the ECS runtime can't be tested end to end on kind alone.
+- ECS needs AWS credentials. The Crossplane AWS providers get them from EKS Pod Identity, through an IAM role limited to ECS services, security groups and log groups. So the ECS runtime runs from EKS, not kind, because `aws login` credentials expire too quickly for a cluster to use.

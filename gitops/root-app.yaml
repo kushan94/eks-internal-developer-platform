@@ -1,4 +1,4 @@
-# The only resource applied by hand. REPO_URL is filled in by `make gitops`.
+# The only resource applied by hand. REPO_URL and AWS_ENABLED are filled in by `make gitops`.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -14,6 +14,8 @@ spec:
       parameters:
         - name: repoURL
           value: REPO_URL
+        - name: aws.enabled
+          value: "AWS_ENABLED"
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd

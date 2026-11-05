@@ -44,7 +44,7 @@ spec:
 |---|---|---|
 | **Crossplane creates** | Deployment and Service | ECS service, task definition, security group and log group |
 | **Reachable from** | Inside the cluster, at `<name>.<namespace>.svc` | Inside the VPC only, with no DNS name yet |
-| **Needs** | Nothing extra | AWS credentials and the `aws-platform` EnvironmentConfig (milestone 4) |
+| **Needs** | Nothing extra | EKS, where Crossplane gets AWS credentials from Pod Identity, plus the `aws-platform` EnvironmentConfig |
 
 The `aws-platform` EnvironmentConfig holds account-specific values, such as subnet IDs, so it is generated and applied directly rather than committed. See [environment.example.yaml](platform/crossplane/aws/environment.example.yaml) for its shape. Without it, an ECS `WebService` reports `Synced=False` with a message naming the missing value.
 
@@ -87,9 +87,9 @@ colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
 - [x] **2. GitOps:** Argo CD deploys the platform and workloads from this repo
 - [x] **3. Backstage:** catalog, plus a template that opens a pull request, running locally
 - [ ] **3b. Backstage in the cluster:** container image, Postgres, GitHub token and sign-in
-- [ ] **4. AWS foundations:** account access, budget alerts, VPC and ECS cluster in Terraform
-- [ ] **5. ECS runtime:** run `runtime: ecs` services on Fargate, managed from kind *(composition built and validated offline)*
-- [ ] **6. EKS:** the same platform on a Terraform-built cluster, with Crossplane using Pod Identity
+- [ ] **4. AWS foundations:** account access, budget alerts, VPC and ECS cluster in Terraform *(planned and budget created, not applied)*
+- [ ] **5. EKS:** the same platform on a Terraform-built cluster, with Crossplane using Pod Identity
+- [ ] **6. ECS runtime:** run `runtime: ecs` services on Fargate, managed from EKS *(composition built and validated offline)*
 - [ ] **7. AWS resources:** add a database to `WebService` for both runtimes
 - [ ] **8. Traffic:** public URLs for both runtimes, with Gateway API on EKS and a shared load balancer
 - [ ] **9. Guardrails:** Kyverno CEL policies, External Secrets Operator and image signing
@@ -101,7 +101,18 @@ colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
 
 The account is on the AWS Free plan in eu-north-1. The Free plan denies Spot instances, OIDC providers and `ec2:CreateFleet`, so this setup uses on-demand nodes and Pod Identity, and can't use Karpenter or EKS Auto Mode. See [ADR 0003](docs/adr/0003-local-first-ephemeral-eks.md).
 
-Before a session, sign in with `aws login`, set a budget alert and copy `infra/terraform/terraform.tfvars.example` to `terraform.tfvars`. At the end of every session, run `terraform destroy` and confirm in the AWS console that nothing is left running.
+Terraform always creates the VPC, a NAT gateway and the ECS cluster, which cost about $0.05 an hour. Setting `enable_eks=true` adds the EKS cluster, two on-demand nodes and the Pod Identity role for Crossplane, for about $0.33 an hour in total. A `$50` monthly budget alert, named `idp-monthly`, excludes credits.
+
+Before a session, sign in with `aws login` and copy `infra/terraform/terraform.tfvars.example` to `terraform.tfvars`. A full EKS session then looks like this:
+
+```sh
+terraform -chdir=infra/terraform apply -var enable_eks=true
+aws eks update-kubeconfig --region eu-north-1 --name idp
+make argocd gitops KUBE_CONTEXT=<EKS context> REPO_URL=https://github.com/kushan94/eks-internal-developer-platform.git AWS_ENABLED=true
+make aws-environment KUBE_CONTEXT=<EKS context>
+# ...work...
+terraform -chdir=infra/terraform destroy -var enable_eks=true
+``` At the end of every session, run `terraform destroy` and confirm in the AWS console that nothing is left running.
 
 ## Pinned versions
 Latest releases checked on 2026-11-03. Only the first six rows are used so far, and the Terraform has only been validated, not applied. The rest are for later milestones.

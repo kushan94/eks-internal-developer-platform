@@ -7,10 +7,14 @@ GIT_CONTAINER ?= idp-git
 # Argo CD reads committed changes from here. Override it to use a hosted repo.
 REPO_URL ?= git://$(shell docker inspect -f '{{.NetworkSettings.Networks.kind.IPAddress}}' $(GIT_CONTAINER))/eks-idp
 CROSSPLANE ?= crossplane
+# crossplane render ignores Docker contexts such as Colima's, so pass the active context's socket.
+export DOCKER_HOST ?= $(shell docker context inspect --format '{{.Endpoints.docker.Host}}' 2>/dev/null)
+# Installs the Crossplane AWS providers. Only works on EKS, where they get credentials from Pod Identity.
+AWS_ENABLED ?= false
 TF_IMAGE ?= hashicorp/terraform:latest
 TF_RUN = docker run --rm -v $(CURDIR)/infra/terraform:/workspace -w /workspace $(TF_IMAGE)
 
-.PHONY: local-up local-down cluster argocd local-git gitops demo status backstage test tf-validate
+.PHONY: local-up local-down cluster argocd local-git gitops demo status backstage aws-environment test tf-validate
 
 local-up: cluster argocd local-git gitops ## Create the kind cluster and hand the platform to Argo CD
 
@@ -34,7 +38,7 @@ local-git: ## Serve this repo's commits to Argo CD over the kind network
 		echo "Git server did not start:"; docker logs $(GIT_CONTAINER); exit 1
 
 gitops: ## Apply the root application
-	sed 's|REPO_URL|$(REPO_URL)|' gitops/root-app.yaml | $(KUBECTL) apply -f -
+	sed -e 's|REPO_URL|$(REPO_URL)|' -e 's|AWS_ENABLED|$(AWS_ENABLED)|' gitops/root-app.yaml | $(KUBECTL) apply -f -
 
 demo: ## Wait for Argo CD to deliver the example WebService
 	for i in $$(seq 1 60); do $(KUBECTL) -n demo get webservice hello >/dev/null 2>&1 && break; sleep 5; done
@@ -46,6 +50,9 @@ status: ## Show Argo CD applications
 
 backstage: ## Run Backstage locally, using your GitHub CLI login to open pull requests
 	cd backstage && GITHUB_TOKEN=$$(gh auth token) yarn start
+
+aws-environment: ## Apply the aws-platform EnvironmentConfig from Terraform outputs
+	terraform -chdir=infra/terraform output -raw aws_platform_environment | $(KUBECTL) apply -f -
 
 test: ## Render the WebService composition for both runtimes and validate it against the provider schemas
 	@rm -rf .test && mkdir -p .test/schemas

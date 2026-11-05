@@ -44,3 +44,13 @@ Copy this for each session:
   - The Crossplane CLI moved to its own repo and download host from v2.3, so older install instructions point to missing files.
 - **AWS cost:** $0
 
+### 2026-11-05: AWS Free plan
+- **Goal:** Prepare AWS without spending credits until each piece is needed.
+- **What happened:** The account is on the Free plan with $100 of credits. A read-only `terraform plan` and a budget alert came before creating anything.
+- **What surprised me:**
+  - The Free plan's service control policies deny Spot instances, OIDC providers and `ec2:CreateFleet`. That rules out Spot nodes, IRSA, Karpenter and EKS Auto Mode. None of this shows up in `terraform plan`; it would only fail during `apply`.
+  - Regions are fixed by the account's contact address. Norway maps to eu-north-1, and other regions are denied.
+  - `aws login` gives the CLI short-lived credentials from a console sign-in, so no access keys are needed. Its credentials last 15 minutes, though, which is too short for Crossplane on kind, so Crossplane uses EKS Pod Identity.
+  - In eu-north-1, an ECS-only session costs about $0.08 an hour, and an EKS session about $0.33. The EKS control plane alone is $0.10 an hour, so a cluster can't stay up all month within $50.
+- **AWS cost:** $0 so far
+
