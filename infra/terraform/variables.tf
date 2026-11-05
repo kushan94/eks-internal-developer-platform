@@ -19,3 +19,9 @@ variable "kubernetes_version" {
   type        = string
   default     = "1.36"
 }
+
+variable "enable_eks" {
+  description = "Create the EKS cluster. It costs about $0.27 an hour with its nodes, so it is off unless a session needs it."
+  type        = bool
+  default     = false
+}
