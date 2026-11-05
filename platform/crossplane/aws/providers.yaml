@@ -1,0 +1,27 @@
+# Installed only when the root chart sets aws.enabled, which needs EKS for Pod Identity.
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-ecs
+spec:
+  package: xpkg.crossplane.io/crossplane-contrib/provider-aws-ecs:v2.9.0
+  runtimeConfigRef:
+    name: aws-pod-identity
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-ec2
+spec:
+  package: xpkg.crossplane.io/crossplane-contrib/provider-aws-ec2:v2.9.0
+  runtimeConfigRef:
+    name: aws-pod-identity
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-aws-cloudwatchlogs
+spec:
+  package: xpkg.crossplane.io/crossplane-contrib/provider-aws-cloudwatchlogs:v2.9.0
+  runtimeConfigRef:
+    name: aws-pod-identity

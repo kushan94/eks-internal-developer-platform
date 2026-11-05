@@ -16,6 +16,7 @@ spec:
       required:
         - name
         - namespace
+        - runtime
         - image
       properties:
         name:
@@ -31,6 +32,16 @@ spec:
           description: Your team's namespace. It is created if it does not exist. System namespaces are not allowed.
           pattern: '^(?!kube-|default$|argocd$|crossplane-system$)[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
           maxLength: 40
+        runtime:
+          title: Runtime
+          type: string
+          description: Where the service runs. Both runtimes take the same settings.
+          default: kubernetes
+          oneOf:
+            - const: kubernetes
+              title: Kubernetes (EKS)
+            - const: ecs
+              title: ECS Fargate
         image:
           title: Container image
           type: string
@@ -58,6 +69,7 @@ spec:
         values:
           name: ${{ parameters.name }}
           namespace: ${{ parameters.namespace }}
+          runtime: ${{ parameters.runtime }}
           image: ${{ parameters.image }}
           port: ${{ parameters.port }}
           replicas: ${{ parameters.replicas }}
@@ -70,7 +82,7 @@ spec:
         branchName: webservice-${{ parameters.namespace }}-${{ parameters.name }}
         title: Add WebService ${{ parameters.namespace }}/${{ parameters.name }}
         description: |
-          Adds the `${{ parameters.name }}` WebService to the `${{ parameters.namespace }}` namespace.
+          Adds the `${{ parameters.name }}` WebService to the `${{ parameters.namespace }}` namespace, running on `${{ parameters.runtime }}`.
 
           Created from the Backstage Web Service template. Argo CD deploys it after this pull request is merged.
 

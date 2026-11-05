@@ -3,6 +3,7 @@ kind: WebService
 metadata:
   name: ${{ values.name }}
 spec:
+  runtime: ${{ values.runtime }}
   image: ${{ values.image }}
   port: ${{ values.port }}
   replicas: ${{ values.replicas }}

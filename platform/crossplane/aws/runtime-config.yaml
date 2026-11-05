@@ -1,0 +1,9 @@
+# Gives every AWS provider the same service account, which EKS Pod Identity maps to an IAM role.
+apiVersion: pkg.crossplane.io/v1beta1
+kind: DeploymentRuntimeConfig
+metadata:
+  name: aws-pod-identity
+spec:
+  serviceAccountTemplate:
+    metadata:
+      name: provider-aws

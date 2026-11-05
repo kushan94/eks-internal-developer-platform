@@ -20,6 +20,11 @@ spec:
               type: object
               required: [image]
               properties:
+                runtime:
+                  type: string
+                  enum: [kubernetes, ecs]
+                  default: kubernetes
+                  description: Where the service runs, on Kubernetes or on ECS Fargate.
                 image:
                   type: string
                   description: Container image to run.

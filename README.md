@@ -29,6 +29,27 @@ spec:
   replicas: 2
 ```
 
+## Choosing a runtime
+`WebService` runs on Kubernetes by default. Set `runtime: ecs` to run the same service on ECS Fargate instead:
+
+```yaml
+spec:
+  runtime: ecs   # or kubernetes
+  image: nginxinc/nginx-unprivileged:1.29-alpine
+  port: 8080
+  replicas: 2
+```
+
+| | Kubernetes | ECS Fargate |
+|---|---|---|
+| **Crossplane creates** | Deployment and Service | ECS service, task definition, security group and log group |
+| **Reachable from** | Inside the cluster, at `<name>.<namespace>.svc` | Inside the VPC only, with no DNS name yet |
+| **Needs** | Nothing extra | EKS, where Crossplane gets AWS credentials from Pod Identity, plus the `aws-platform` EnvironmentConfig |
+
+The `aws-platform` EnvironmentConfig holds account-specific values, such as subnet IDs, so it is generated and applied directly rather than committed. See [environment.example.yaml](platform/crossplane/aws/environment.example.yaml) for its shape. Without it, an ECS `WebService` reports `Synced=False` with a message naming the missing value.
+
+Run `make test` to render the composition for both runtimes and validate the output against the AWS provider schemas. It needs Docker and the [Crossplane CLI](https://docs.crossplane.io/latest/cli/), but not AWS.
+
 ## Developer portal
 Backstage also needs Node.js 24 and Corepack (`corepack enable`), and a GitHub CLI login. Install its dependencies once, then start it:
 
@@ -37,7 +58,7 @@ cd backstage && yarn install && cd ..
 make backstage  # http://localhost:3000
 ```
 
-Choose **Create > Web Service** and fill in the form. Backstage opens a pull request that adds a `WebService` and a catalog entry, and Argo CD deploys it after you merge. Backstage shows the new entry in its catalog after the merge too.
+Choose **Create > Web Service**, pick a runtime and fill in the form. Backstage opens a pull request that adds a `WebService` and a catalog entry, and Argo CD deploys it after you merge. Backstage shows the new entry in its catalog after the merge too.
 
 `make backstage` passes your GitHub CLI token to Backstage, and that token can reach all of your repositories. Guest sign-in and the allow-all permission policy are also on, so keep it on your own machine until milestone 3b.
 
@@ -66,18 +87,55 @@ colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
 - [x] **2. GitOps:** Argo CD deploys the platform and workloads from this repo
 - [x] **3. Backstage:** catalog, plus a template that opens a pull request, running locally
 - [ ] **3b. Backstage in the cluster:** container image, Postgres, GitHub token and sign-in
-- [ ] **4. EKS:** the same platform on a Terraform-built cluster
-- [ ] **5. AWS resources:** add a database to `WebService` with the Crossplane AWS provider and Pod Identity
-- [ ] **6. Traffic:** Gateway API with the AWS Load Balancer Controller
-- [ ] **7. Guardrails:** Kyverno CEL policies, External Secrets Operator and image signing
-- [ ] **8. Observability and cost:** OpenTelemetry, Prometheus, Grafana and OpenCost
-- [ ] **9. Scaling:** Karpenter and KEDA
-- [ ] **10. Article:** publish the write-up
+- [ ] **4. AWS foundations:** account access, budget alerts, VPC and ECS cluster in Terraform *(planned and budget created, not applied)*
+- [ ] **5. EKS:** the same platform on a Terraform-built cluster, with Crossplane using Pod Identity
+- [ ] **6. ECS runtime:** run `runtime: ecs` services on Fargate, managed from EKS *(composition built and validated offline)*
+- [ ] **7. AWS resources:** add a database to `WebService` for both runtimes
+- [ ] **8. Traffic:** public URLs for both runtimes, with Gateway API on EKS and a shared load balancer
+- [ ] **9. Guardrails:** Kyverno CEL policies, External Secrets Operator and image signing
+- [ ] **10. Observability, cost and scaling:** OpenTelemetry, Prometheus, Grafana, OpenCost, Karpenter and KEDA
+- [ ] **11. Article:** publish the write-up
+
+## Infrastructure pipeline
+[`.github/workflows/infra.yml`](.github/workflows/infra.yml) runs Terraform for `infra/terraform`:
+
+| Trigger | What runs |
+|---|---|
+| Pull request that changes `infra/terraform` | `validate`, then a read-only `plan` (not for pull requests from forks) |
+| **Run workflow** with `plan` | `plan` |
+| **Run workflow** with `apply` | `plan`, then `apply` after you approve it |
+| **Run workflow** with `destroy` | `destroy` after you approve it |
+| Every night at 22:00 UTC | `destroy`, without approval |
+
+Tick **enable_eks** when running the workflow to include the EKS cluster. Logs show only resource addresses and actions, because this repo's logs are public. See [ADR 0006](docs/adr/0006-infrastructure-pipeline.md).
+
+One-time setup, from your laptop after `aws login`:
+
+```sh
+make bootstrap     # S3 state bucket and the github-plan and github-apply IAM users
+make github-setup  # GitHub environments and secrets, from the bootstrap outputs
+make tf-init       # Point your local Terraform at the same state
+```
+
+The bootstrap stack's state stays in `infra/bootstrap/terraform.tfstate`. It holds the access keys, so it is gitignored. Keep it safe.
 
 ## EKS sessions
 `make tf-validate` runs Terraform in Docker and does not touch AWS. Creating real resources needs the AWS CLI, Terraform and AWS credentials, and it costs money.
 
-Before a session, set a budget alert and copy `infra/terraform/terraform.tfvars.example` to `terraform.tfvars`. At the end of every session, run `terraform destroy` and confirm in the AWS console that nothing is left running.
+The account is on the AWS Free plan in eu-north-1. The Free plan denies Spot instances, OIDC providers and `ec2:CreateFleet`, so this setup uses on-demand nodes and Pod Identity, and can't use Karpenter or EKS Auto Mode. See [ADR 0003](docs/adr/0003-local-first-ephemeral-eks.md).
+
+Terraform always creates the VPC, a NAT gateway and the ECS cluster, which cost about $0.05 an hour. Setting `enable_eks=true` adds the EKS cluster, two on-demand nodes and the Pod Identity role for Crossplane, for about $0.33 an hour in total. A `$50` monthly budget alert, named `idp-monthly`, excludes credits.
+
+Before a session, sign in with `aws login` and copy `infra/terraform/terraform.tfvars.example` to `terraform.tfvars`. A full EKS session then looks like this:
+
+```sh
+terraform -chdir=infra/terraform apply -var enable_eks=true   # or run the Infrastructure workflow
+aws eks update-kubeconfig --region eu-north-1 --name idp
+make argocd gitops KUBE_CONTEXT=<EKS context> REPO_URL=https://github.com/kushan94/eks-internal-developer-platform.git AWS_ENABLED=true
+make aws-environment KUBE_CONTEXT=<EKS context>
+# ...work...
+terraform -chdir=infra/terraform destroy -var enable_eks=true
+``` At the end of every session, run `terraform destroy` and confirm in the AWS console that nothing is left running.
 
 ## Pinned versions
 Latest releases checked on 2026-11-03. Only the first six rows are used so far, and the Terraform has only been validated, not applied. The rest are for later milestones.
@@ -90,7 +148,9 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 | EKS Kubernetes | 1.36 |
 | terraform-aws-eks / terraform-aws-vpc | 21.29 / 6.7 |
 | Backstage | 1.56.0 (1.56.3 is available) |
-| provider-upjet-aws | 2.9.0 |
+| provider-upjet-aws (ECS, EC2, CloudWatch Logs) | 2.9.0 |
+| function-environment-configs / function-auto-ready | 0.9.2 / 0.7.3 |
+| Crossplane CLI | 2.5.0 |
 | AWS Load Balancer Controller | 3.6.2 |
 | Gateway API | 1.7.0 |
 | Kyverno | 1.19.2 |
@@ -102,6 +162,8 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0002: Self-host Backstage](docs/adr/0002-self-host-backstage.md)
 - [ADR 0003: Build locally first and keep EKS ephemeral](docs/adr/0003-local-first-ephemeral-eks.md)
 - [ADR 0004: Structure GitOps with a root application](docs/adr/0004-gitops-structure.md)
+- [ADR 0005: Offer Kubernetes and ECS Fargate behind one API](docs/adr/0005-kubernetes-and-ecs-runtimes.md)
+- [ADR 0006: Run Terraform from GitHub Actions with access keys](docs/adr/0006-infrastructure-pipeline.md)
 
 ## License
 [MIT](LICENSE)
