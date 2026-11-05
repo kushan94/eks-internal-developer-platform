@@ -1,0 +1,80 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: webservice
+  title: Web Service
+  description: Opens a pull request that adds a WebService. Argo CD deploys it once the pull request is merged.
+  tags:
+    - crossplane
+    - gitops
+spec:
+  owner: group:default/guests
+  type: service
+
+  parameters:
+    - title: Service details
+      required:
+        - name
+        - namespace
+        - image
+      properties:
+        name:
+          title: Name
+          type: string
+          description: Lowercase letters, numbers and hyphens.
+          pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+          maxLength: 40
+          ui:autofocus: true
+        namespace:
+          title: Namespace
+          type: string
+          description: Your team's namespace. It is created if it does not exist. System namespaces are not allowed.
+          pattern: '^(?!kube-|default$|argocd$|crossplane-system$)[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+          maxLength: 40
+        image:
+          title: Container image
+          type: string
+          description: For example, nginxinc/nginx-unprivileged:1.29-alpine
+          pattern: '^\S+$'
+        port:
+          title: Container port
+          type: integer
+          default: 8080
+          minimum: 1
+          maximum: 65535
+        replicas:
+          title: Replicas
+          type: integer
+          default: 2
+          minimum: 1
+          maximum: 10
+
+  steps:
+    - id: render
+      name: Render manifests
+      action: fetch:template
+      input:
+        url: ./skeleton
+        values:
+          name: ${{ parameters.name }}
+          namespace: ${{ parameters.namespace }}
+          image: ${{ parameters.image }}
+          port: ${{ parameters.port }}
+          replicas: ${{ parameters.replicas }}
+
+    - id: pull-request
+      name: Open pull request
+      action: publish:github:pull-request
+      input:
+        repoUrl: github.com?owner=kushan94&repo=eks-internal-developer-platform
+        branchName: webservice-${{ parameters.namespace }}-${{ parameters.name }}
+        title: Add WebService ${{ parameters.namespace }}/${{ parameters.name }}
+        description: |
+          Adds the `${{ parameters.name }}` WebService to the `${{ parameters.namespace }}` namespace.
+
+          Created from the Backstage Web Service template. Argo CD deploys it after this pull request is merged.
+
+  output:
+    links:
+      - title: Pull request
+        url: ${{ steps['pull-request'].output.remoteUrl }}

@@ -1,0 +1,13 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: demo-hello
+  title: hello
+  description: WebService in the demo namespace
+  annotations:
+    github.com/project-slug: kushan94/eks-internal-developer-platform
+    argocd/app-name: workload-demo
+spec:
+  type: service
+  lifecycle: experimental
+  owner: group:default/guests

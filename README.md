@@ -29,12 +29,24 @@ spec:
   replicas: 2
 ```
 
+## Developer portal
+Backstage also needs Node.js 24 and Corepack (`corepack enable`), and a GitHub CLI login. Install its dependencies once, then start it:
+
+```sh
+cd backstage && yarn install && cd ..
+make backstage  # http://localhost:3000
+```
+
+Choose **Create > Web Service** and fill in the form. Backstage opens a pull request that adds a `WebService` and a catalog entry, and Argo CD deploys it after you merge. Backstage shows the new entry in its catalog after the merge too.
+
+`make backstage` passes your GitHub CLI token to Backstage, and that token can reach all of your repositories. Guest sign-in and the allow-all permission policy are also on, so keep it on your own machine until milestone 3b.
+
 ## How changes are deployed
 Argo CD reads **commits**, not your working tree, so uncommitted changes have no effect. It checks for new commits about every 3 minutes.
 
 | To do this | Change this |
 |---|---|
-| Add a team or service | Add a file under `workloads/<namespace>/` |
+| Add a team or service | Use the Backstage template, or add a file under `workloads/<namespace>/` |
 | Change a platform API | Edit `platform/crossplane/webservice/` |
 | Add a platform component | Add an application to `gitops/root/templates/` |
 
@@ -52,7 +64,8 @@ colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
 ## Roadmap
 - [x] **1. Local core:** Crossplane, Argo CD and the `WebService` API on kind
 - [x] **2. GitOps:** Argo CD deploys the platform and workloads from this repo
-- [ ] **3. Backstage:** catalog, plus a template that opens a pull request
+- [x] **3. Backstage:** catalog, plus a template that opens a pull request, running locally
+- [ ] **3b. Backstage in the cluster:** container image, Postgres, GitHub token and sign-in
 - [ ] **4. EKS:** the same platform on a Terraform-built cluster
 - [ ] **5. AWS resources:** add a database to `WebService` with the Crossplane AWS provider and Pod Identity
 - [ ] **6. Traffic:** Gateway API with the AWS Load Balancer Controller
@@ -67,7 +80,7 @@ colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
 Before a session, set a budget alert and copy `infra/terraform/terraform.tfvars.example` to `terraform.tfvars`. At the end of every session, run `terraform destroy` and confirm in the AWS console that nothing is left running.
 
 ## Pinned versions
-Latest releases checked on 2026-11-03. Only the first five rows are used so far, and the Terraform has only been validated, not applied. The rest are for later milestones.
+Latest releases checked on 2026-11-03. Only the first six rows are used so far, and the Terraform has only been validated, not applied. The rest are for later milestones.
 
 | Tool | Version |
 |---|---|
@@ -76,7 +89,7 @@ Latest releases checked on 2026-11-03. Only the first five rows are used so far,
 | function-go-templating | 0.13.2 |
 | EKS Kubernetes | 1.36 |
 | terraform-aws-eks / terraform-aws-vpc | 21.29 / 6.7 |
-| Backstage | 1.56.3 |
+| Backstage | 1.56.0 (1.56.3 is available) |
 | provider-upjet-aws | 2.9.0 |
 | AWS Load Balancer Controller | 3.6.2 |
 | Gateway API | 1.7.0 |
