@@ -8,6 +8,21 @@ spec:
     kind: WebService
   mode: Pipeline
   pipeline:
+    # Account-specific AWS settings, such as subnets and the ECS cluster. Only the ECS runtime needs them.
+    - step: load-environment
+      functionRef:
+        name: function-environment-configs
+      input:
+        apiVersion: environmentconfigs.fn.crossplane.io/v1beta1
+        kind: Input
+        spec:
+          environmentConfigs:
+            - type: Reference
+              ref:
+                name: aws-platform
+          policy:
+            resolution: Optional
+
     - step: render
       functionRef:
         name: function-go-templating
@@ -19,6 +34,9 @@ spec:
           template: |
             {{- $xr := .observed.composite.resource }}
             {{- $name := $xr.metadata.name }}
+            {{- $ns := $xr.metadata.namespace }}
+            {{- $runtime := default "kubernetes" $xr.spec.runtime }}
+            {{- if eq $runtime "kubernetes" }}
             {{- $available := dig "deployment" "resource" "status" "availableReplicas" 0 (default dict .observed.resources) }}
             apiVersion: apps/v1
             kind: Deployment
@@ -56,3 +74,116 @@ spec:
               ports:
                 - port: 80
                   targetPort: {{ $xr.spec.port }}
+            {{- else if eq $runtime "ecs" }}
+            {{- $aws := dig "aws" dict (default dict (index .context "apiextensions.crossplane.io/environment")) }}
+            {{- range $key := list "region" "ecsClusterArn" "vpcId" "vpcCidr" "subnetIds" "taskExecutionRoleArn" }}
+            {{- if not (hasKey $aws $key) }}{{ fail (printf "the ECS runtime needs aws.%s in the aws-platform EnvironmentConfig" $key) }}{{ end }}
+            {{- end }}
+            {{- $awsName := printf "idp-%s-%s" $ns $name }}
+            {{- $logGroup := printf "/idp/%s/%s" $ns $name }}
+            {{- $container := dict "name" "app" "image" $xr.spec.image "essential" true
+                  "portMappings" (list (dict "containerPort" $xr.spec.port "protocol" "tcp"))
+                  "logConfiguration" (dict "logDriver" "awslogs" "options" (dict "awslogs-group" $logGroup "awslogs-region" $aws.region "awslogs-stream-prefix" "app")) }}
+            apiVersion: cloudwatchlogs.aws.m.upbound.io/v1beta1
+            kind: Group
+            metadata:
+              name: {{ $name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: log-group
+                crossplane.io/external-name: {{ $logGroup }}
+            spec:
+              forProvider:
+                region: {{ $aws.region }}
+                retentionInDays: 7
+            ---
+            apiVersion: ec2.aws.m.upbound.io/v1beta1
+            kind: SecurityGroup
+            metadata:
+              name: {{ $name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: security-group
+            spec:
+              forProvider:
+                region: {{ $aws.region }}
+                name: {{ $awsName }}
+                description: {{ printf "WebService %s/%s" $ns $name | quote }}
+                vpcId: {{ $aws.vpcId }}
+            ---
+            # Only traffic from inside the VPC can reach the service.
+            apiVersion: ec2.aws.m.upbound.io/v1beta1
+            kind: SecurityGroupIngressRule
+            metadata:
+              name: {{ $name }}-ingress
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: ingress-rule
+            spec:
+              forProvider:
+                region: {{ $aws.region }}
+                securityGroupIdRef:
+                  name: {{ $name }}
+                cidrIpv4: {{ $aws.vpcCidr }}
+                ipProtocol: tcp
+                fromPort: {{ $xr.spec.port }}
+                toPort: {{ $xr.spec.port }}
+            ---
+            # Tasks need outbound access to pull images and send logs.
+            apiVersion: ec2.aws.m.upbound.io/v1beta1
+            kind: SecurityGroupEgressRule
+            metadata:
+              name: {{ $name }}-egress
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: egress-rule
+            spec:
+              forProvider:
+                region: {{ $aws.region }}
+                securityGroupIdRef:
+                  name: {{ $name }}
+                cidrIpv4: 0.0.0.0/0
+                ipProtocol: "-1"
+            ---
+            apiVersion: ecs.aws.m.upbound.io/v1beta1
+            kind: TaskDefinition
+            metadata:
+              name: {{ $name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: task-definition
+            spec:
+              forProvider:
+                region: {{ $aws.region }}
+                family: {{ $awsName }}
+                cpu: "256"
+                memory: "512"
+                networkMode: awsvpc
+                requiresCompatibilities: [FARGATE]
+                executionRoleArn: {{ $aws.taskExecutionRoleArn }}
+                containerDefinitions: {{ list $container | toJson | toJson }}
+            ---
+            apiVersion: ecs.aws.m.upbound.io/v1beta1
+            kind: Service
+            metadata:
+              name: {{ $name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: ecs-service
+                crossplane.io/external-name: {{ $awsName }}
+            spec:
+              forProvider:
+                region: {{ $aws.region }}
+                cluster: {{ $aws.ecsClusterArn }}
+                launchType: FARGATE
+                desiredCount: {{ $xr.spec.replicas }}
+                taskDefinitionRef:
+                  name: {{ $name }}
+                networkConfiguration:
+                  subnets: {{ $aws.subnetIds | toJson }}
+                  securityGroupRefs:
+                    - name: {{ $name }}
+                  assignPublicIp: false
+                deploymentCircuitBreaker:
+                  enable: true
+                  rollback: true
+            {{- end }}
+
+    # Marks AWS resources ready once they report Ready. Kubernetes resources set their readiness above.
+    - step: ready
+      functionRef:
+        name: function-auto-ready
