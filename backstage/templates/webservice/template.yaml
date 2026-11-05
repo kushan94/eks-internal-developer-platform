@@ -16,6 +16,7 @@ spec:
       required:
         - name
         - namespace
+        - runtime
         - image
       properties:
         name:

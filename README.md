@@ -29,6 +29,27 @@ spec:
   replicas: 2
 ```
 
+## Choosing a runtime
+`WebService` runs on Kubernetes by default. Set `runtime: ecs` to run the same service on ECS Fargate instead:
+
+```yaml
+spec:
+  runtime: ecs   # or kubernetes
+  image: nginxinc/nginx-unprivileged:1.29-alpine
+  port: 8080
+  replicas: 2
+```
+
+| | Kubernetes | ECS Fargate |
+|---|---|---|
+| **Crossplane creates** | Deployment and Service | ECS service, task definition, security group and log group |
+| **Reachable from** | Inside the cluster, at `<name>.<namespace>.svc` | Inside the VPC only, with no DNS name yet |
+| **Needs** | Nothing extra | AWS credentials and the `aws-platform` EnvironmentConfig (milestone 4) |
+
+The `aws-platform` EnvironmentConfig holds account-specific values, such as subnet IDs, so it is generated and applied directly rather than committed. See [environment.example.yaml](platform/crossplane/aws/environment.example.yaml) for its shape. Without it, an ECS `WebService` reports `Synced=False` with a message naming the missing value.
+
+Run `make test` to render the composition for both runtimes and validate the output against the AWS provider schemas. It needs Docker and the [Crossplane CLI](https://docs.crossplane.io/latest/cli/), but not AWS.
+
 ## Developer portal
 Backstage also needs Node.js 24 and Corepack (`corepack enable`), and a GitHub CLI login. Install its dependencies once, then start it:
 
@@ -37,7 +58,7 @@ cd backstage && yarn install && cd ..
 make backstage  # http://localhost:3000
 ```
 
-Choose **Create > Web Service** and fill in the form. Backstage opens a pull request that adds a `WebService` and a catalog entry, and Argo CD deploys it after you merge. Backstage shows the new entry in its catalog after the merge too.
+Choose **Create > Web Service**, pick a runtime and fill in the form. Backstage opens a pull request that adds a `WebService` and a catalog entry, and Argo CD deploys it after you merge. Backstage shows the new entry in its catalog after the merge too.
 
 `make backstage` passes your GitHub CLI token to Backstage, and that token can reach all of your repositories. Guest sign-in and the allow-all permission policy are also on, so keep it on your own machine until milestone 3b.
 
@@ -66,13 +87,14 @@ colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
 - [x] **2. GitOps:** Argo CD deploys the platform and workloads from this repo
 - [x] **3. Backstage:** catalog, plus a template that opens a pull request, running locally
 - [ ] **3b. Backstage in the cluster:** container image, Postgres, GitHub token and sign-in
-- [ ] **4. EKS:** the same platform on a Terraform-built cluster
-- [ ] **5. AWS resources:** add a database to `WebService` with the Crossplane AWS provider and Pod Identity
-- [ ] **6. Traffic:** Gateway API with the AWS Load Balancer Controller
-- [ ] **7. Guardrails:** Kyverno CEL policies, External Secrets Operator and image signing
-- [ ] **8. Observability and cost:** OpenTelemetry, Prometheus, Grafana and OpenCost
-- [ ] **9. Scaling:** Karpenter and KEDA
-- [ ] **10. Article:** publish the write-up
+- [ ] **4. AWS foundations:** account access, budget alerts, VPC and ECS cluster in Terraform
+- [ ] **5. ECS runtime:** run `runtime: ecs` services on Fargate, managed from kind *(composition built and validated offline)*
+- [ ] **6. EKS:** the same platform on a Terraform-built cluster, with Crossplane using Pod Identity
+- [ ] **7. AWS resources:** add a database to `WebService` for both runtimes
+- [ ] **8. Traffic:** public URLs for both runtimes, with Gateway API on EKS and a shared load balancer
+- [ ] **9. Guardrails:** Kyverno CEL policies, External Secrets Operator and image signing
+- [ ] **10. Observability, cost and scaling:** OpenTelemetry, Prometheus, Grafana, OpenCost, Karpenter and KEDA
+- [ ] **11. Article:** publish the write-up
 
 ## EKS sessions
 `make tf-validate` runs Terraform in Docker and does not touch AWS. Creating real resources needs the AWS CLI, Terraform and AWS credentials, and it costs money.
@@ -90,7 +112,9 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 | EKS Kubernetes | 1.36 |
 | terraform-aws-eks / terraform-aws-vpc | 21.29 / 6.7 |
 | Backstage | 1.56.0 (1.56.3 is available) |
-| provider-upjet-aws | 2.9.0 |
+| provider-upjet-aws (ECS, EC2, CloudWatch Logs) | 2.9.0 |
+| function-environment-configs / function-auto-ready | 0.9.2 / 0.7.3 |
+| Crossplane CLI | 2.5.0 |
 | AWS Load Balancer Controller | 3.6.2 |
 | Gateway API | 1.7.0 |
 | Kyverno | 1.19.2 |
@@ -102,6 +126,7 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0002: Self-host Backstage](docs/adr/0002-self-host-backstage.md)
 - [ADR 0003: Build locally first and keep EKS ephemeral](docs/adr/0003-local-first-ephemeral-eks.md)
 - [ADR 0004: Structure GitOps with a root application](docs/adr/0004-gitops-structure.md)
+- [ADR 0005: Offer Kubernetes and ECS Fargate behind one API](docs/adr/0005-kubernetes-and-ecs-runtimes.md)
 
 ## License
 [MIT](LICENSE)
