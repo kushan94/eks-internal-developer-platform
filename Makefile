@@ -12,9 +12,10 @@ export DOCKER_HOST ?= $(shell docker context inspect --format '{{.Endpoints.dock
 # Installs the Crossplane AWS providers. Only works on EKS, where they get credentials from Pod Identity.
 AWS_ENABLED ?= false
 TF_IMAGE ?= hashicorp/terraform:latest
+TF_STATE_BUCKET ?= $(shell terraform -chdir=infra/bootstrap output -raw state_bucket 2>/dev/null)
 TF_RUN = docker run --rm -v $(CURDIR)/infra/terraform:/workspace -w /workspace $(TF_IMAGE)
 
-.PHONY: local-up local-down cluster argocd local-git gitops demo status backstage aws-environment test tf-validate
+.PHONY: local-up local-down cluster argocd local-git gitops demo status backstage aws-environment test tf-validate tf-init bootstrap github-setup
 
 local-up: cluster argocd local-git gitops ## Create the kind cluster and hand the platform to Argo CD
 
@@ -64,6 +65,16 @@ test: ## Render the WebService composition for both runtimes and validate it aga
 		--extra-resources platform/crossplane/aws/environment.example.yaml > .test/ecs.yaml
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/kubernetes.yaml
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/ecs.yaml
+
+bootstrap: ## Create the Terraform state bucket and GitHub IAM users (once, from your laptop)
+	terraform -chdir=infra/bootstrap init
+	terraform -chdir=infra/bootstrap apply
+
+github-setup: ## Create the GitHub environments and secrets from the bootstrap outputs
+	scripts/github-setup.sh
+
+tf-init: ## Point the main Terraform stack at the S3 state bucket
+	terraform -chdir=infra/terraform init -reconfigure -backend-config="bucket=$(TF_STATE_BUCKET)"
 
 tf-validate: ## Check the Terraform without touching AWS
 	$(TF_RUN) init -backend=false -input=false

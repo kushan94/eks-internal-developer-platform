@@ -96,6 +96,29 @@ colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
 - [ ] **10. Observability, cost and scaling:** OpenTelemetry, Prometheus, Grafana, OpenCost, Karpenter and KEDA
 - [ ] **11. Article:** publish the write-up
 
+## Infrastructure pipeline
+[`.github/workflows/infra.yml`](.github/workflows/infra.yml) runs Terraform for `infra/terraform`:
+
+| Trigger | What runs |
+|---|---|
+| Pull request that changes `infra/terraform` | `validate`, then a read-only `plan` (not for pull requests from forks) |
+| **Run workflow** with `plan` | `plan` |
+| **Run workflow** with `apply` | `plan`, then `apply` after you approve it |
+| **Run workflow** with `destroy` | `destroy` after you approve it |
+| Every night at 22:00 UTC | `destroy`, without approval |
+
+Tick **enable_eks** when running the workflow to include the EKS cluster. Logs show only resource addresses and actions, because this repo's logs are public. See [ADR 0006](docs/adr/0006-infrastructure-pipeline.md).
+
+One-time setup, from your laptop after `aws login`:
+
+```sh
+make bootstrap     # S3 state bucket and the github-plan and github-apply IAM users
+make github-setup  # GitHub environments and secrets, from the bootstrap outputs
+make tf-init       # Point your local Terraform at the same state
+```
+
+The bootstrap stack's state stays in `infra/bootstrap/terraform.tfstate`. It holds the access keys, so it is gitignored. Keep it safe.
+
 ## EKS sessions
 `make tf-validate` runs Terraform in Docker and does not touch AWS. Creating real resources needs the AWS CLI, Terraform and AWS credentials, and it costs money.
 
@@ -106,7 +129,7 @@ Terraform always creates the VPC, a NAT gateway and the ECS cluster, which cost 
 Before a session, sign in with `aws login` and copy `infra/terraform/terraform.tfvars.example` to `terraform.tfvars`. A full EKS session then looks like this:
 
 ```sh
-terraform -chdir=infra/terraform apply -var enable_eks=true
+terraform -chdir=infra/terraform apply -var enable_eks=true   # or run the Infrastructure workflow
 aws eks update-kubeconfig --region eu-north-1 --name idp
 make argocd gitops KUBE_CONTEXT=<EKS context> REPO_URL=https://github.com/kushan94/eks-internal-developer-platform.git AWS_ENABLED=true
 make aws-environment KUBE_CONTEXT=<EKS context>
@@ -140,6 +163,7 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0003: Build locally first and keep EKS ephemeral](docs/adr/0003-local-first-ephemeral-eks.md)
 - [ADR 0004: Structure GitOps with a root application](docs/adr/0004-gitops-structure.md)
 - [ADR 0005: Offer Kubernetes and ECS Fargate behind one API](docs/adr/0005-kubernetes-and-ecs-runtimes.md)
+- [ADR 0006: Run Terraform from GitHub Actions with access keys](docs/adr/0006-infrastructure-pipeline.md)
 
 ## License
 [MIT](LICENSE)
