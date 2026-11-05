@@ -99,7 +99,9 @@ colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
 ## EKS sessions
 `make tf-validate` runs Terraform in Docker and does not touch AWS. Creating real resources needs the AWS CLI, Terraform and AWS credentials, and it costs money.
 
-Before a session, set a budget alert and copy `infra/terraform/terraform.tfvars.example` to `terraform.tfvars`. At the end of every session, run `terraform destroy` and confirm in the AWS console that nothing is left running.
+The account is on the AWS Free plan in eu-north-1. The Free plan denies Spot instances, OIDC providers and `ec2:CreateFleet`, so this setup uses on-demand nodes and Pod Identity, and can't use Karpenter or EKS Auto Mode. See [ADR 0003](docs/adr/0003-local-first-ephemeral-eks.md).
+
+Before a session, sign in with `aws login`, set a budget alert and copy `infra/terraform/terraform.tfvars.example` to `terraform.tfvars`. At the end of every session, run `terraform destroy` and confirm in the AWS console that nothing is left running.
 
 ## Pinned versions
 Latest releases checked on 2026-11-03. Only the first six rows are used so far, and the Terraform has only been validated, not applied. The rest are for later milestones.

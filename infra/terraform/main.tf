@@ -43,6 +43,9 @@ module "eks" {
 
   enable_cluster_creator_admin_permissions = true
 
+  # Pod Identity replaces IRSA, and the AWS Free plan denies creating OIDC providers.
+  enable_irsa = false
+
   vpc_id     = module.vpc.vpc_id
   subnet_ids = module.vpc.private_subnets
 
@@ -55,9 +58,10 @@ module "eks" {
 
   eks_managed_node_groups = {
     system = {
-      ami_type       = "AL2023_x86_64_STANDARD"
-      capacity_type  = "SPOT"
-      instance_types = ["t3.large", "t3a.large", "m5.large"]
+      ami_type = "AL2023_x86_64_STANDARD"
+      # The AWS Free plan denies Spot instances.
+      capacity_type  = "ON_DEMAND"
+      instance_types = ["t3.large"]
 
       min_size     = 2
       max_size     = 3
