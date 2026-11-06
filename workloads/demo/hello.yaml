@@ -5,6 +5,7 @@ metadata:
 spec:
   runtime: kubernetes
   public: true
-  image: nginxinc/nginx-unprivileged:1.29-alpine
-  port: 8080
+  # podinfo is a small demo app whose page shows which pod answered.
+  image: ghcr.io/stefanprodan/podinfo:6.17.0
+  port: 9898
   replicas: 2
