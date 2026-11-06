@@ -206,6 +206,11 @@ jobs:
             exit 1
           fi
       - run: terraform init -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" > /dev/null
+      # The AWS Load Balancer Controller creates ALBs, target groups and security
+      # groups outside Terraform. Left behind, they block deleting the VPC.
+      - name: Delete load balancers created from Kubernetes
+        working-directory: .
+        run: scripts/delete-k8s-load-balancers.sh idp
       - name: Destroy
         run: |
           if [ -z "$(terraform state list)" ]; then

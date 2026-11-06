@@ -59,6 +59,11 @@ spec:
           default: 2
           minimum: 1
           maximum: 10
+        public:
+          title: Public URL
+          type: boolean
+          default: false
+          description: Serve the service at https://<name>-<namespace>.idp.skyforgelab.cloud. Kubernetes runtime only, for now.
 
   steps:
     - id: render
@@ -73,6 +78,7 @@ spec:
           image: ${{ parameters.image }}
           port: ${{ parameters.port }}
           replicas: ${{ parameters.replicas }}
+          public: ${{ parameters.public }}
 
     - id: pull-request
       name: Open pull request

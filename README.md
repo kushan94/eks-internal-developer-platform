@@ -50,6 +50,16 @@ The `aws-platform` EnvironmentConfig holds account-specific values, such as subn
 
 Run `make test` to render the composition for both runtimes and validate the output against the AWS provider schemas. It needs Docker and the [Crossplane CLI](https://docs.crossplane.io/latest/cli/), but not AWS.
 
+## Public URLs
+On EKS, add `public: true` to a Kubernetes-runtime WebService to serve it at `https://<name>-<namespace>.idp.skyforgelab.cloud`. Its URL appears in `kubectl get webservice` and in `status.url`. One shared ALB, created from a Gateway API Gateway, serves every public service, and ExternalDNS publishes the hostnames. See [ADR 0009](docs/adr/0009-public-urls.md).
+
+One-time DNS setup:
+1. **Create the zone:** run `make bootstrap`, which creates the Route 53 zone for `idp.skyforgelab.cloud` and its wildcard certificate.
+2. **Get the nameservers:** run `terraform -chdir=infra/bootstrap output platform_domain_nameservers`.
+3. **Delegate the subdomain:** in the DNS zone for `skyforgelab.cloud`, add NS records for `idp` pointing at those four nameservers. ACM validates the certificate once they resolve.
+
+ECS services stay reachable only inside the VPC for now.
+
 ## Developer portal
 Backstage also needs Node.js 24 and Corepack (`corepack enable`), and a GitHub CLI login. Install its dependencies once, then start it:
 
@@ -91,7 +101,7 @@ colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
 - [ ] **5. EKS:** the same platform on a Terraform-built cluster, with Crossplane using Pod Identity
 - [ ] **6. ECS runtime:** run `runtime: ecs` services on Fargate, managed from EKS *(composition built and validated offline)*
 - [ ] **7. AWS resources:** add a database to `WebService` for both runtimes
-- [ ] **8. Traffic:** public URLs for both runtimes, with Gateway API on EKS and a shared load balancer
+- [ ] **8. Traffic:** public URLs with Gateway API on EKS *(Kubernetes runtime built; ECS later)*
 - [ ] **9. Guardrails:** Kyverno CEL policies, External Secrets Operator and image signing
 - [ ] **10. Observability, cost and scaling:** OpenTelemetry, Prometheus, Grafana, OpenCost, Karpenter and KEDA
 - [ ] **11. Article:** publish the write-up
@@ -201,6 +211,7 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0006: Run Terraform from GitHub Actions with access keys](docs/adr/0006-infrastructure-pipeline.md)
 - [ADR 0007: Give Argo CD repo access through a GitHub App](docs/adr/0007-argocd-repo-access.md)
 - [ADR 0008: Set up clusters from a GitHub runner inside the VPC](docs/adr/0008-vpc-runner.md)
+- [ADR 0009: Public URLs through Gateway API and a Route 53 subdomain](docs/adr/0009-public-urls.md)
 
 ## License
 [MIT](LICENSE)

@@ -12,6 +12,13 @@ spec:
     - name: v1alpha1
       served: true
       referenceable: true
+      additionalPrinterColumns:
+        - name: Runtime
+          type: string
+          jsonPath: .spec.runtime
+        - name: URL
+          type: string
+          jsonPath: .status.url
       schema:
         openAPIV3Schema:
           type: object
@@ -36,3 +43,13 @@ spec:
                   type: integer
                   minimum: 1
                   default: 2
+                public:
+                  type: boolean
+                  default: false
+                  description: Give the service a public HTTPS URL. Kubernetes runtime only, for now.
+            status:
+              type: object
+              properties:
+                url:
+                  type: string
+                  description: Public URL, when spec.public is true.
