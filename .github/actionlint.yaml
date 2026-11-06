@@ -1,0 +1,4 @@
+self-hosted-runner:
+  # The VPC runner registered by infra/terraform/runner-userdata.sh.tftpl
+  labels:
+    - idp-vpc

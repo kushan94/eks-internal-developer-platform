@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""Create the GitHub App that Argo CD uses to read repositories.
+"""Create the platform's GitHub Apps.
+
+  argocd  Lets Argo CD read repositories (Contents: read)
+  runner  Lets the VPC runner register itself with this repo (Administration: write)
 
 Uses GitHub's app manifest flow: this script defines the app, you click
 Create in the browser, and GitHub hands the app's ID and private key back to
 this script. Credentials are saved under ~/.config/eks-idp with owner-only
 permissions and are never printed.
 
-  scripts/github-app.py create    Create the app (opens your browser)
-  scripts/github-app.py secret    After installing the app, write the JSON for
-                                  the idp/argocd/github-app Secrets Manager secret
+  scripts/github-app.py create [argocd|runner]   Create the app (opens your browser)
+  scripts/github-app.py secret [argocd|runner]   After installing the app, write the
+                                                 JSON for its Secrets Manager secret
 
 Only uses the Python standard library and the openssl command.
 """
@@ -28,10 +31,42 @@ from pathlib import Path
 
 PORT = 8765
 CONFIG_DIR = Path.home() / ".config" / "eks-idp"
-KEY_FILE = CONFIG_DIR / "github-app.pem"
-APP_FILE = CONFIG_DIR / "github-app.json"
-SECRET_FILE = CONFIG_DIR / "github-app-secret.json"
 API = "https://api.github.com"
+
+PROFILES = {
+    "argocd": {
+        "name": "{owner}-idp-argocd",
+        "description": "Lets Argo CD read repositories for the internal developer platform.",
+        "permissions": {"contents": "read", "metadata": "read"},
+        "file_stem": "github-app",
+        "secret_id": "idp/argocd/github-app",
+        "install_hint": "Install it on all repos, or the ones Argo CD may read",
+    },
+    "runner": {
+        "name": "{owner}-idp-runner",
+        "description": "Lets the platform's VPC runner register with the platform repo.",
+        "permissions": {"administration": "write", "metadata": "read"},
+        "file_stem": "github-runner-app",
+        "secret_id": "idp/github/runner-app",
+        "install_hint": "Install it ONLY on the platform repo, because it can administer the repos it's installed on",
+    },
+}
+
+KEY_FILE = APP_FILE = SECRET_FILE = PROFILE = None
+
+
+def use_profile(name):
+    global KEY_FILE, APP_FILE, SECRET_FILE, PROFILE
+    if name not in PROFILES:
+        sys.exit(f"Unknown app '{name}'. Choose one of: {', '.join(PROFILES)}")
+    PROFILE = PROFILES[name]
+    stem = PROFILE["file_stem"]
+    KEY_FILE = CONFIG_DIR / f"{stem}.pem"
+    APP_FILE = CONFIG_DIR / f"{stem}.json"
+    SECRET_FILE = CONFIG_DIR / f"{stem}-secret.json"
+
+
+use_profile("argocd")
 
 
 def write_private(path, data):
@@ -55,13 +90,13 @@ def create(owner, repo_url):
         sys.exit(f"{KEY_FILE} already exists. Delete it first to create another app.")
     state = secrets.token_urlsafe(16)
     manifest = {
-        "name": f"{owner}-idp-argocd",
+        "name": PROFILE["name"].format(owner=owner),
         "url": repo_url,
-        "description": "Lets Argo CD read repositories for the internal developer platform.",
+        "description": PROFILE["description"],
         "public": False,
         "redirect_url": f"http://localhost:{PORT}/callback",
         "hook_attributes": {"url": "https://example.com/unused", "active": False},
-        "default_permissions": {"contents": "read", "metadata": "read"},
+        "default_permissions": PROFILE["permissions"],
     }
     form = f"""<!doctype html><html><body>
 <form id="f" method="post" action="https://github.com/settings/apps/new?state={state}">
@@ -106,8 +141,8 @@ def create(owner, repo_url):
         sys.exit("Timed out after 10 minutes without a callback from GitHub.")
     print(f"Created GitHub App {result['slug']} (ID {result['id']}).")
     print(f"Private key saved to {KEY_FILE}")
-    print(f"Next, install it on the repos Argo CD may read: https://github.com/apps/{result['slug']}/installations/new")
-    print("Then run: scripts/github-app.py secret")
+    print(f"Next, {PROFILE['install_hint']}: https://github.com/apps/{result['slug']}/installations/new")
+    print(f"Then run: scripts/github-app.py secret {sys.argv[2] if len(sys.argv) > 2 else 'argocd'}")
 
 
 def jwt(app_id):
@@ -141,11 +176,12 @@ def secret():
     }))
     print(f"Installed on {installation['account']['login']} ({installation['repository_selection']} repositories), installation ID {installation['id']}.")
     print(f"Secret value written to {SECRET_FILE}. Store it with:")
-    print(f"  aws secretsmanager put-secret-value --secret-id idp/argocd/github-app --secret-string file://{SECRET_FILE}")
+    print(f"  aws secretsmanager put-secret-value --secret-id {PROFILE['secret_id']} --secret-string file://{SECRET_FILE}")
 
 
 if __name__ == "__main__":
     command = sys.argv[1] if len(sys.argv) > 1 else ""
+    use_profile(sys.argv[2] if len(sys.argv) > 2 else "argocd")
     if command == "create":
         owner = os.environ.get("GITHUB_OWNER", "kushan94")
         create(owner, os.environ.get("REPO_URL", f"https://github.com/{owner}/eks-internal-developer-platform"))

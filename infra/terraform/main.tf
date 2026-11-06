@@ -46,15 +46,39 @@ module "eks" {
   # lock you out when the pipeline applies, and change access on every run.
   enable_cluster_creator_admin_permissions = false
   kms_key_administrators                   = var.cluster_admin_arns
-  access_entries = {
-    for i, arn in var.cluster_admin_arns : "admin-${i}" => {
-      principal_arn = arn
-      policy_associations = {
-        admin = {
-          policy_arn   = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-          access_scope = { type = "cluster" }
+  access_entries = merge(
+    {
+      for i, arn in var.cluster_admin_arns : "admin-${i}" => {
+        principal_arn = arn
+        policy_associations = {
+          admin = {
+            policy_arn   = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+            access_scope = { type = "cluster" }
+          }
         }
       }
+    },
+    {
+      # The VPC runner installs Argo CD and the cluster bootstrap.
+      github-runner = {
+        principal_arn = aws_iam_role.runner[0].arn
+        policy_associations = {
+          admin = {
+            policy_arn   = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+            access_scope = { type = "cluster" }
+          }
+        }
+      }
+    },
+  )
+
+  # The runner reaches the API through the private endpoint.
+  security_group_additional_rules = {
+    github_runner = {
+      description              = "Kubernetes API from the VPC GitHub runner"
+      from_port                = 443
+      to_port                  = 443
+      source_security_group_id = aws_security_group.runner[0].id
     }
   }
 

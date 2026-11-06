@@ -114,3 +114,15 @@ resource "aws_secretsmanager_secret" "argocd_github_app" {
 output "argocd_github_app_secret" {
   value = aws_secretsmanager_secret.argocd_github_app.name
 }
+
+# GitHub App that the VPC runner uses to register itself with this repo.
+# Same pattern: Terraform creates the secret, you store the value with the CLI.
+resource "aws_secretsmanager_secret" "runner_github_app" {
+  name                    = "idp/github/runner-app"
+  description             = "GitHub App the VPC runner uses to get a registration token. JSON with appId, installationId and privateKey."
+  recovery_window_in_days = 7
+}
+
+output "runner_github_app_secret" {
+  value = aws_secretsmanager_secret.runner_github_app.name
+}
