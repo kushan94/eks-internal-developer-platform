@@ -19,22 +19,30 @@ out() { terraform -chdir=infra/bootstrap output -raw "$1"; }
 # Plans run for pull requests, so this environment has no branch restriction.
 gh api -X PUT "repos/$REPO/environments/aws-plan" --silent
 
-# Applies need your approval and can only run from main.
-gh api -X PUT "repos/$REPO/environments/aws-apply" --silent --input - <<JSON
+# Required reviewers and branch rules only work on public repos with GitHub Free.
+if [ "$(gh repo view "$REPO" --json visibility --jq .visibility)" = "PUBLIC" ]; then
+  # Applies need your approval and can only run from main.
+  gh api -X PUT "repos/$REPO/environments/aws-apply" --silent --input - <<JSON
 {"reviewers": [{"type": "User", "id": $APPROVER_ID}],
  "deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}
 JSON
 
-# The nightly destroy runs without approval, but only from main.
-gh api -X PUT "repos/$REPO/environments/aws-destroy" --silent --input - <<JSON
+  # The nightly destroy runs without approval, but only from main.
+  gh api -X PUT "repos/$REPO/environments/aws-destroy" --silent --input - <<JSON
 {"deployment_branch_policy": {"protected_branches": false, "custom_branch_policies": true}}
 JSON
 
-for env in aws-apply aws-destroy; do
-  if ! gh api "repos/$REPO/environments/$env/deployment-branch-policies" --jq '.branch_policies[].name' | grep -qx main; then
-    gh api -X POST "repos/$REPO/environments/$env/deployment-branch-policies" -f name=main -f type=branch --silent
-  fi
-done
+  for env in aws-apply aws-destroy; do
+    if ! gh api "repos/$REPO/environments/$env/deployment-branch-policies" --jq '.branch_policies[].name' | grep -qx main; then
+      gh api -X POST "repos/$REPO/environments/$env/deployment-branch-policies" -f name=main -f type=branch --silent
+    fi
+  done
+else
+  echo "Warning: $REPO is private, so aws-apply can't require approval or be limited to main." >&2
+  echo "Run this script again after making the repo public to add those protections." >&2
+  gh api -X PUT "repos/$REPO/environments/aws-apply" --silent
+  gh api -X PUT "repos/$REPO/environments/aws-destroy" --silent
+fi
 
 set_secret() { gh secret set "$2" --repo "$REPO" --env "$1"; }
 for env in aws-plan aws-apply aws-destroy; do
