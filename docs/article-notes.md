@@ -90,3 +90,8 @@ Copy this for each session:
   - The provider builds the ECS service ID as `service/<cluster>/<name>`, so `cluster` must be the cluster name, not its ARN. Offline schema validation couldn't catch this, because both are valid strings. Only a real apply did.
 - **AWS cost:** about $0.40 for a 1-hour session
 
+### 2026-11-06: DNS delegation
+- **What happened:** The domain's nameservers pointed at a deleted Azure DNS zone, so nothing resolved. A first fix set the registrar's nameservers to the `idp` zone's, which can't work: those servers only answer for the subdomain.
+- **Fix:** Route 53 now hosts the parent zone too. The registrar points at the parent zone, and the parent delegates `idp` to its own zone with NS records.
+- **Lesson:** "delegate a subdomain" means NS records *inside the parent zone*, not changing the domain's nameservers. Writing the delegation as a Terraform resource makes the relationship explicit.
+
