@@ -1,0 +1,44 @@
+# Deploys services that live in other repos. Each file in apps/ names a repo,
+# a path inside it and a namespace, so onboarding a repo is a reviewed pull
+# request to this repo.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: external-apps
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: {{ .Values.repoURL }}
+        revision: {{ .Values.targetRevision }}
+        files:
+          - path: apps/*.yaml
+  template:
+    metadata:
+      name: 'app-{{ "{{ .namespace }}" }}-{{ "{{ .name }}" }}'
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: workloads
+      source:
+        repoURL: '{{ "{{ .repoURL }}" }}'
+        targetRevision: '{{ "{{ .targetRevision }}" }}'
+        path: '{{ "{{ .path }}" }}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{ "{{ .namespace }}" }}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - SkipDryRunOnMissingResource=true
+        retry:
+          limit: 20
+          backoff:
+            duration: 15s
+            factor: 2
+            maxDuration: 2m

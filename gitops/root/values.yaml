@@ -5,3 +5,6 @@ crossplaneChartVersion: 2.4.3
 aws:
   # Installs the Crossplane AWS providers. Needs AWS credentials, so it is off for local clusters.
   enabled: false
+
+# GitHub account whose repos teams can deploy from.
+githubOwner: kushan94

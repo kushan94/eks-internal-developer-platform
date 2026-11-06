@@ -1,0 +1,43 @@
+# Platform components: Crossplane, its providers and the WebService API.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+spec:
+  description: Platform components, managed by the platform team
+  sourceRepos:
+    - {{ .Values.repoURL }}
+    - https://charts.crossplane.io/stable
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: crossplane-system
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+---
+# Team workloads. Teams can only create WebServices, only in their own
+# namespaces, and only from repos under githubOwner.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: workloads
+  namespace: argocd
+spec:
+  description: Team services, deployed through the WebService API
+  sourceRepos:
+    - {{ .Values.repoURL }}
+    - https://github.com/{{ .Values.githubOwner }}/*
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: "*"
+    {{- range list "default" "argocd" "crossplane-system" "external-secrets" "kube-*" }}
+    - server: https://kubernetes.default.svc
+      namespace: "!{{ . }}"
+    {{- end }}
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: platform.example.org
+      kind: WebService

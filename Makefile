@@ -2,6 +2,9 @@ CLUSTER ?= idp-local
 KUBE_CONTEXT ?= kind-$(CLUSTER)
 KUBECTL = kubectl --context $(KUBE_CONTEXT)
 ARGOCD_CHART_VERSION ?= 10.11.6
+ESO_CHART_VERSION ?= 2.14.0
+# GitHub account whose repos Argo CD can read with the GitHub App.
+GITHUB_OWNER ?= kushan94
 GIT_IMAGE ?= alpine:3.22
 GIT_CONTAINER ?= idp-git
 # Argo CD reads committed changes from here. Override it to use a hosted repo.
@@ -15,7 +18,7 @@ TF_IMAGE ?= hashicorp/terraform:latest
 TF_STATE_BUCKET ?= $(shell terraform -chdir=infra/bootstrap output -raw state_bucket 2>/dev/null)
 TF_RUN = docker run --rm -v $(CURDIR)/infra/terraform:/workspace -w /workspace $(TF_IMAGE)
 
-.PHONY: local-up local-down cluster argocd local-git gitops demo status backstage aws-environment test tf-validate tf-init bootstrap github-setup
+.PHONY: local-up local-down cluster argocd external-secrets platform-bootstrap local-git gitops demo status backstage aws-environment test tf-validate tf-init bootstrap github-setup
 
 local-up: cluster argocd local-git gitops ## Create the kind cluster and hand the platform to Argo CD
 
@@ -30,6 +33,16 @@ argocd:
 	helm repo add argo https://argoproj.github.io/argo-helm --force-update
 	helm upgrade --install argocd argo/argo-cd --version $(ARGOCD_CHART_VERSION) \
 		--namespace argocd --create-namespace --wait --kube-context $(KUBE_CONTEXT)
+
+external-secrets:
+	helm repo add external-secrets https://charts.external-secrets.io --force-update
+	helm upgrade --install external-secrets external-secrets/external-secrets --version $(ESO_CHART_VERSION) \
+		--namespace external-secrets --create-namespace --wait --kube-context $(KUBE_CONTEXT)
+
+platform-bootstrap: argocd external-secrets ## On EKS: install Argo CD and External Secrets, then give Argo CD the GitHub App credentials
+	$(KUBECTL) apply -f platform/bootstrap/cluster-secret-store.yaml
+	sed 's|GITHUB_OWNER|$(GITHUB_OWNER)|' platform/bootstrap/argocd-repo-creds.yaml | $(KUBECTL) apply -f -
+	$(KUBECTL) -n argocd wait externalsecret github-app-repo-creds --for=condition=Ready --timeout=120s
 
 local-git: ## Serve this repo's commits to Argo CD over the kind network
 	-docker rm -f $(GIT_CONTAINER)

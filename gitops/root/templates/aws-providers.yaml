@@ -5,7 +5,7 @@ metadata:
   name: aws-providers
   namespace: argocd
 spec:
-  project: default
+  project: platform
   source:
     repoURL: {{ .Values.repoURL }}
     targetRevision: {{ .Values.targetRevision }}
