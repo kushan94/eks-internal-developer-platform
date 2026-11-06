@@ -1,0 +1,48 @@
+#!/bin/bash
+# Installs a GitHub Actions runner and registers it with the repository.
+# The registration token comes from the runner GitHub App, whose key is read
+# from Secrets Manager with the instance role, so no token is stored anywhere.
+set -euo pipefail
+
+REGION="${region}"
+REPOSITORY="${repository}"
+RUNNER_VERSION="${runner_version}"
+RUNNER_SHA256="${runner_sha256}"
+
+dnf install -y git make jq tar gzip libicu openssl
+
+useradd --create-home runner
+cd /home/runner
+curl -fsSLo runner.tar.gz "https://github.com/actions/runner/releases/download/v$${RUNNER_VERSION}/actions-runner-linux-x64-$${RUNNER_VERSION}.tar.gz"
+echo "$${RUNNER_SHA256}  runner.tar.gz" | sha256sum -c -
+tar xzf runner.tar.gz && rm runner.tar.gz
+chown -R runner:runner /home/runner
+
+b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+
+secret="$(aws secretsmanager get-secret-value --region "$REGION" --secret-id idp/github/runner-app --query SecretString --output text)"
+app_id="$(jq -r .appId <<<"$secret")"
+installation_id="$(jq -r .installationId <<<"$secret")"
+key_file="$(mktemp)"
+chmod 600 "$key_file"
+jq -r .privateKey <<<"$secret" > "$key_file"
+unset secret
+
+now="$(date +%s)"
+header="$(printf '{"alg":"RS256","typ":"JWT"}' | b64url)"
+payload="$(printf '{"iat":%d,"exp":%d,"iss":"%s"}' "$((now - 60))" "$((now + 540))" "$app_id" | b64url)"
+signature="$(printf '%s.%s' "$header" "$payload" | openssl dgst -sha256 -sign "$key_file" | b64url)"
+rm -f "$key_file"
+
+api() { curl -fsS -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer $1" "https://api.github.com$2"; }
+installation_token="$(api "$header.$payload.$signature" "/app/installations/$installation_id/access_tokens" | jq -r .token)"
+registration_token="$(api "$installation_token" "/repos/$REPOSITORY/actions/runners/registration-token" | jq -r .token)"
+
+instance_id="$(TOKEN=$(curl -fsS -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' http://169.254.169.254/latest/api/token) && curl -fsS -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/instance-id)"
+sudo -u runner ./config.sh --unattended --replace \
+  --url "https://github.com/$REPOSITORY" \
+  --token "$registration_token" \
+  --name "idp-vpc-$instance_id" \
+  --labels idp-vpc
+./svc.sh install runner
+./svc.sh start

@@ -68,3 +68,12 @@ Copy this for each session:
   - Clusters destroyed nightly rule out keeping credentials only in the cluster, and they make Sealed Secrets awkward, because each new cluster would need the decryption key.
 - **AWS cost:** about $1 for the half-built cluster from the failed apply
 
+### 2026-11-06: A runner inside the VPC
+- **Goal:** Set up each new cluster from CI, without opening the API to GitHub's network.
+- **What happened:** I chose a self-hosted runner in a private subnet. It registers itself at boot with a short-lived token from a second GitHub App, whose key it reads from Secrets Manager.
+- **What surprised me:**
+  - GitHub Apps can be created from code through the app manifest flow, which leaves only two clicks in the browser.
+  - A JWT built with `openssl` in a shell script was accepted by GitHub, so the boot script needs no extra tools.
+  - My first test of the "wait until healthy" logic falsely passed a broken state. The cause was testing in zsh while `make` uses `sh`. Rerunning under `sh` showed the Makefile was correct.
+- **AWS cost:** $0, all checked offline
+

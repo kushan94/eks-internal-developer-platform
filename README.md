@@ -100,23 +100,36 @@ colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
 Argo CD reads private repos through a GitHub App. The app's credentials live in AWS Secrets Manager, and External Secrets Operator turns them into an Argo CD credential template for every repo under `https://github.com/kushan94`. See [ADR 0007](docs/adr/0007-argocd-repo-access.md).
 
 One-time setup:
-1. **Create the app:** in GitHub, go to **Settings → Developer settings → GitHub Apps → New GitHub App**.
-   - **Permissions:** set *Repository → Contents* to *Read-only*.
-   - **Webhook:** untick *Active*.
-2. **Install it:** install the app on the repos Argo CD may read, or on all repos.
-3. **Keep three values:** the App ID from the app's page, the installation ID from the URL of the installation's settings page, and a downloaded private key.
-4. **Create the secret:** run `make bootstrap` to create the `idp/argocd/github-app` secret.
-5. **Store the values**, from the folder containing the key file:
+1. **Create the app:** run `scripts/github-app.py create`. It opens GitHub's app manifest flow, where you check the app and click **Create**. The app gets read-only *Contents* and *Metadata* access and no webhook. Its ID and private key are saved to `~/.config/eks-idp/`, readable only by you.
+2. **Install it:** follow the link the script prints, and install the app on all repos or only the ones Argo CD may read.
+3. **Prepare the secret:** run `scripts/github-app.py secret`. It finds the installation ID and writes the secret's JSON to `~/.config/eks-idp/github-app-secret.json`.
+4. **Store it:** create the secret with `make bootstrap`, then store the JSON:
    ```sh
-   python3 -c 'import json,sys; print(json.dumps({"appId": sys.argv[1], "installationId": sys.argv[2], "privateKey": open(sys.argv[3]).read()}))' \
-     <app id> <installation id> <key file>.pem > /tmp/github-app.json
-   aws secretsmanager put-secret-value --secret-id idp/argocd/github-app --secret-string file:///tmp/github-app.json
-   rm /tmp/github-app.json
+   aws secretsmanager put-secret-value --secret-id idp/argocd/github-app \
+     --secret-string file://$HOME/.config/eks-idp/github-app-secret.json
    ```
 
 To deploy a service from another repo, add a file to [`apps/`](apps/README.md).
 
 Teams are limited by the `workloads` Argo CD project. They can only create `WebService` resources, only outside the platform's own namespaces, and only from repos under the GitHub account.
+
+## Cluster pipeline
+[`.github/workflows/cluster.yml`](.github/workflows/cluster.yml) sets up a new EKS cluster after each successful Infrastructure run, and can also be run by hand:
+1. Installs Argo CD and External Secrets, which provides Argo CD's GitHub App credentials
+2. Applies the root app, with the AWS providers turned on
+3. Applies the `aws-platform` settings from Terraform outputs
+4. Waits until every Argo CD application is Synced and Healthy
+
+It runs on a self-hosted runner inside the VPC, created by Terraform with EKS. The runner reaches the private API endpoint with its instance role, so no AWS keys are needed. See [ADR 0008](docs/adr/0008-vpc-runner.md).
+
+One-time setup for the runner's GitHub App:
+1. **Create the app:** run `scripts/github-app.py create runner`, then install it **only on this repo**, because it can administer any repo it's installed on.
+2. **Prepare the secret:** run `scripts/github-app.py secret runner`.
+3. **Store it:** create the secret with `make bootstrap`, then store the JSON:
+   ```sh
+   aws secretsmanager put-secret-value --secret-id idp/github/runner-app \
+     --secret-string file://$HOME/.config/eks-idp/github-runner-app-secret.json
+   ```
 
 ## Infrastructure pipeline
 [`.github/workflows/infra.yml`](.github/workflows/infra.yml) runs Terraform for `infra/terraform`:
@@ -146,7 +159,7 @@ The bootstrap stack's state stays in `infra/bootstrap/terraform.tfstate`. It hol
 
 The account is on the AWS Free plan in eu-north-1. The Free plan denies Spot instances, OIDC providers and `ec2:CreateFleet`, and only allows Free Tier-eligible instance types, so this setup uses on-demand `m7i-flex.large` nodes and Pod Identity, and can't use Karpenter or EKS Auto Mode. See [ADR 0003](docs/adr/0003-local-first-ephemeral-eks.md).
 
-Terraform always creates the VPC, a NAT gateway and the ECS cluster, which cost about $0.05 an hour. Setting `enable_eks=true` adds the EKS cluster, two on-demand nodes and the Pod Identity role for Crossplane, for about $0.36 an hour in total. A `$50` monthly budget alert, named `idp-monthly`, excludes credits.
+Terraform always creates the VPC, a NAT gateway and the ECS cluster, which cost about $0.05 an hour. Setting `enable_eks=true` adds the EKS cluster, two on-demand nodes and the Pod Identity role for Crossplane, for about $0.38 an hour in total, including the VPC runner. A `$50` monthly budget alert, named `idp-monthly`, excludes credits.
 
 Before a session, sign in with `aws login` and copy `infra/terraform/terraform.tfvars.example` to `terraform.tfvars`. A full EKS session then looks like this:
 
@@ -187,6 +200,7 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0005: Offer Kubernetes and ECS Fargate behind one API](docs/adr/0005-kubernetes-and-ecs-runtimes.md)
 - [ADR 0006: Run Terraform from GitHub Actions with access keys](docs/adr/0006-infrastructure-pipeline.md)
 - [ADR 0007: Give Argo CD repo access through a GitHub App](docs/adr/0007-argocd-repo-access.md)
+- [ADR 0008: Set up clusters from a GitHub runner inside the VPC](docs/adr/0008-vpc-runner.md)
 
 ## License
 [MIT](LICENSE)

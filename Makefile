@@ -18,7 +18,7 @@ TF_IMAGE ?= hashicorp/terraform:latest
 TF_STATE_BUCKET ?= $(shell terraform -chdir=infra/bootstrap output -raw state_bucket 2>/dev/null)
 TF_RUN = docker run --rm -v $(CURDIR)/infra/terraform:/workspace -w /workspace $(TF_IMAGE)
 
-.PHONY: local-up local-down cluster argocd external-secrets platform-bootstrap local-git gitops demo status backstage aws-environment test tf-validate tf-init bootstrap github-setup
+.PHONY: local-up local-down cluster argocd external-secrets platform-bootstrap wait-apps local-git gitops demo status backstage aws-environment test tf-validate tf-init bootstrap github-setup
 
 local-up: cluster argocd local-git gitops ## Create the kind cluster and hand the platform to Argo CD
 
@@ -58,6 +58,13 @@ demo: ## Wait for Argo CD to deliver the example WebService
 	for i in $$(seq 1 60); do $(KUBECTL) -n demo get webservice hello >/dev/null 2>&1 && break; sleep 5; done
 	$(KUBECTL) -n demo wait webservice hello --for=condition=Ready --timeout=300s
 	$(KUBECTL) -n demo get webservice,deployment,service
+
+wait-apps: ## Wait until every Argo CD application is Synced and Healthy (up to 15 minutes)
+	@for i in $$(seq 1 90); do \
+		apps=$$($(KUBECTL) -n argocd get applications -o jsonpath='{range .items[*]}{.metadata.name}={.status.sync.status}/{.status.health.status}{"\n"}{end}' 2>/dev/null); \
+		if [ -n "$$apps" ] && ! echo "$$apps" | grep -qv '=Synced/Healthy$$'; then echo "$$apps"; echo "All applications are Synced and Healthy."; exit 0; fi; \
+		sleep 10; \
+	done; echo "Timed out. Not ready:"; echo "$$apps" | grep -v '=Synced/Healthy$$'; exit 1
 
 status: ## Show Argo CD applications
 	$(KUBECTL) -n argocd get applications

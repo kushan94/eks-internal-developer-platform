@@ -35,3 +35,9 @@ variable "cluster_admin_arns" {
     error_message = "Name at least one cluster admin."
   }
 }
+
+variable "github_repository" {
+  description = "Repository the VPC runner registers with, as owner/name."
+  type        = string
+  default     = "kushan94/eks-internal-developer-platform"
+}
