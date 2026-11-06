@@ -83,6 +83,20 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           mask-aws-account-id: true
+      - name: Check secrets
+        env:
+          CLUSTER_ADMIN_ARNS: ${{ secrets.CLUSTER_ADMIN_ARNS }}
+          ALLOWED_CIDR: ${{ secrets.ALLOWED_CIDR }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+        run: |
+          missing=""
+          for name in CLUSTER_ADMIN_ARNS ALLOWED_CIDR TF_STATE_BUCKET; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing secrets in the ${{ github.job == 'plan' && 'aws-plan' || 'aws-apply or aws-destroy' }} environment:$missing. Run 'make github-setup' after 'aws login'."
+            exit 1
+          fi
       - run: terraform init -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" > /dev/null
       - name: Plan
         run: |
@@ -126,6 +140,20 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           mask-aws-account-id: true
+      - name: Check secrets
+        env:
+          CLUSTER_ADMIN_ARNS: ${{ secrets.CLUSTER_ADMIN_ARNS }}
+          ALLOWED_CIDR: ${{ secrets.ALLOWED_CIDR }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+        run: |
+          missing=""
+          for name in CLUSTER_ADMIN_ARNS ALLOWED_CIDR TF_STATE_BUCKET; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing secrets in the ${{ github.job == 'plan' && 'aws-plan' || 'aws-apply or aws-destroy' }} environment:$missing. Run 'make github-setup' after 'aws login'."
+            exit 1
+          fi
       - run: terraform init -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" > /dev/null
       - name: Apply
         run: |
@@ -163,6 +191,20 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           mask-aws-account-id: true
+      - name: Check secrets
+        env:
+          CLUSTER_ADMIN_ARNS: ${{ secrets.CLUSTER_ADMIN_ARNS }}
+          ALLOWED_CIDR: ${{ secrets.ALLOWED_CIDR }}
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+        run: |
+          missing=""
+          for name in CLUSTER_ADMIN_ARNS ALLOWED_CIDR TF_STATE_BUCKET; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing secrets in the ${{ github.job == 'plan' && 'aws-plan' || 'aws-apply or aws-destroy' }} environment:$missing. Run 'make github-setup' after 'aws login'."
+            exit 1
+          fi
       - run: terraform init -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" > /dev/null
       - name: Destroy
         run: |
