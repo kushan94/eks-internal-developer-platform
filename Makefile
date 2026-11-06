@@ -72,7 +72,10 @@ status: ## Show Argo CD applications
 backstage: ## Run Backstage locally, using your GitHub CLI login to open pull requests
 	cd backstage && GITHUB_TOKEN=$$(gh auth token) yarn start
 
-aws-environment: ## Apply the aws-platform EnvironmentConfig from Terraform outputs
+aws-environment: ## Apply the aws-platform EnvironmentConfig from Terraform outputs, once Crossplane is installed
+	@echo "Waiting for Argo CD to install Crossplane's EnvironmentConfig type..."
+	@for i in $$(seq 1 60); do $(KUBECTL) get crd environmentconfigs.apiextensions.crossplane.io >/dev/null 2>&1 && break; sleep 10; done
+	$(KUBECTL) wait crd environmentconfigs.apiextensions.crossplane.io --for=condition=Established --timeout=60s
 	terraform -chdir=infra/terraform output -raw aws_platform_environment | $(KUBECTL) apply -f -
 
 test: ## Render the WebService composition for both runtimes and validate it against the provider schemas

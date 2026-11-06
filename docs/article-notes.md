@@ -77,3 +77,16 @@ Copy this for each session:
   - My first test of the "wait until healthy" logic falsely passed a broken state. The cause was testing in zsh while `make` uses `sh`. Rerunning under `sh` showed the Makefile was correct.
 - **AWS cost:** $0, all checked offline
 
+### 2026-11-06: First full run on EKS
+- **Goal:** Run the whole platform on EKS from the pipelines.
+- **What happened:**
+  - The Infrastructure workflow created EKS, and the VPC runner registered itself.
+  - The Cluster workflow installed Argo CD and External Secrets, and Argo CD read the private repo through the GitHub App.
+  - Crossplane's AWS providers authenticated through Pod Identity.
+  - A `runtime: ecs` WebService became a running Fargate task that answered HTTP 200 from inside the VPC.
+  - Deleting it removed every AWS resource it had created.
+- **Mistakes and fixes:**
+  - The Cluster workflow applied an `EnvironmentConfig` seconds after handing over to Argo CD, before Crossplane had installed that type. It now waits for the type. Locally I had always run it later, so the race only appeared in CI.
+  - The provider builds the ECS service ID as `service/<cluster>/<name>`, so `cluster` must be the cluster name, not its ARN. Offline schema validation couldn't catch this, because both are valid strings. Only a real apply did.
+- **AWS cost:** about $0.40 for a 1-hour session
+

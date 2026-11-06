@@ -17,7 +17,7 @@ output "aws_platform_environment" {
     data = {
       aws = {
         region               = var.region
-        ecsClusterArn        = aws_ecs_cluster.this.arn
+        ecsClusterName       = aws_ecs_cluster.this.name
         vpcId                = module.vpc.vpc_id
         vpcCidr              = module.vpc.vpc_cidr_block
         subnetIds            = module.vpc.private_subnets
