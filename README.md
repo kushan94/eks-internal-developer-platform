@@ -100,18 +100,13 @@ colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
 Argo CD reads private repos through a GitHub App. The app's credentials live in AWS Secrets Manager, and External Secrets Operator turns them into an Argo CD credential template for every repo under `https://github.com/kushan94`. See [ADR 0007](docs/adr/0007-argocd-repo-access.md).
 
 One-time setup:
-1. **Create the app:** in GitHub, go to **Settings → Developer settings → GitHub Apps → New GitHub App**.
-   - **Permissions:** set *Repository → Contents* to *Read-only*.
-   - **Webhook:** untick *Active*.
-2. **Install it:** install the app on the repos Argo CD may read, or on all repos.
-3. **Keep three values:** the App ID from the app's page, the installation ID from the URL of the installation's settings page, and a downloaded private key.
-4. **Create the secret:** run `make bootstrap` to create the `idp/argocd/github-app` secret.
-5. **Store the values**, from the folder containing the key file:
+1. **Create the app:** run `scripts/github-app.py create`. It opens GitHub's app manifest flow, where you check the app and click **Create**. The app gets read-only *Contents* and *Metadata* access and no webhook. Its ID and private key are saved to `~/.config/eks-idp/`, readable only by you.
+2. **Install it:** follow the link the script prints, and install the app on all repos or only the ones Argo CD may read.
+3. **Prepare the secret:** run `scripts/github-app.py secret`. It finds the installation ID and writes the secret's JSON to `~/.config/eks-idp/github-app-secret.json`.
+4. **Store it:** create the secret with `make bootstrap`, then store the JSON:
    ```sh
-   python3 -c 'import json,sys; print(json.dumps({"appId": sys.argv[1], "installationId": sys.argv[2], "privateKey": open(sys.argv[3]).read()}))' \
-     <app id> <installation id> <key file>.pem > /tmp/github-app.json
-   aws secretsmanager put-secret-value --secret-id idp/argocd/github-app --secret-string file:///tmp/github-app.json
-   rm /tmp/github-app.json
+   aws secretsmanager put-secret-value --secret-id idp/argocd/github-app \
+     --secret-string file://$HOME/.config/eks-idp/github-app-secret.json
    ```
 
 To deploy a service from another repo, add a file to [`apps/`](apps/README.md).
