@@ -101,3 +101,16 @@ output "github_apply_secret_access_key" {
   value     = aws_iam_access_key.github_apply.secret
   sensitive = true
 }
+
+# Credentials for the Argo CD GitHub App. Terraform only creates the secret;
+# you put the value in with the AWS CLI, so the private key never enters
+# Terraform state. It lives here because this stack survives the nightly destroy.
+resource "aws_secretsmanager_secret" "argocd_github_app" {
+  name                    = "idp/argocd/github-app"
+  description             = "GitHub App that Argo CD uses to read repositories. JSON with appId, installationId and privateKey."
+  recovery_window_in_days = 7
+}
+
+output "argocd_github_app_secret" {
+  value = aws_secretsmanager_secret.argocd_github_app.name
+}

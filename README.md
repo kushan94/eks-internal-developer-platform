@@ -96,6 +96,28 @@ colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
 - [ ] **10. Observability, cost and scaling:** OpenTelemetry, Prometheus, Grafana, OpenCost, Karpenter and KEDA
 - [ ] **11. Article:** publish the write-up
 
+## Repo access and other repos
+Argo CD reads private repos through a GitHub App. The app's credentials live in AWS Secrets Manager, and External Secrets Operator turns them into an Argo CD credential template for every repo under `https://github.com/kushan94`. See [ADR 0007](docs/adr/0007-argocd-repo-access.md).
+
+One-time setup:
+1. **Create the app:** in GitHub, go to **Settings → Developer settings → GitHub Apps → New GitHub App**.
+   - **Permissions:** set *Repository → Contents* to *Read-only*.
+   - **Webhook:** untick *Active*.
+2. **Install it:** install the app on the repos Argo CD may read, or on all repos.
+3. **Keep three values:** the App ID from the app's page, the installation ID from the URL of the installation's settings page, and a downloaded private key.
+4. **Create the secret:** run `make bootstrap` to create the `idp/argocd/github-app` secret.
+5. **Store the values**, from the folder containing the key file:
+   ```sh
+   python3 -c 'import json,sys; print(json.dumps({"appId": sys.argv[1], "installationId": sys.argv[2], "privateKey": open(sys.argv[3]).read()}))' \
+     <app id> <installation id> <key file>.pem > /tmp/github-app.json
+   aws secretsmanager put-secret-value --secret-id idp/argocd/github-app --secret-string file:///tmp/github-app.json
+   rm /tmp/github-app.json
+   ```
+
+To deploy a service from another repo, add a file to [`apps/`](apps/README.md).
+
+Teams are limited by the `workloads` Argo CD project. They can only create `WebService` resources, only outside the platform's own namespaces, and only from repos under the GitHub account.
+
 ## Infrastructure pipeline
 [`.github/workflows/infra.yml`](.github/workflows/infra.yml) runs Terraform for `infra/terraform`:
 
@@ -131,7 +153,7 @@ Before a session, sign in with `aws login` and copy `infra/terraform/terraform.t
 ```sh
 terraform -chdir=infra/terraform apply -var enable_eks=true   # or run the Infrastructure workflow
 aws eks update-kubeconfig --region eu-north-1 --name idp
-make argocd gitops KUBE_CONTEXT=<EKS context> REPO_URL=https://github.com/kushan94/eks-internal-developer-platform.git AWS_ENABLED=true
+make platform-bootstrap gitops KUBE_CONTEXT=<EKS context> REPO_URL=https://github.com/kushan94/eks-internal-developer-platform.git AWS_ENABLED=true
 make aws-environment KUBE_CONTEXT=<EKS context>
 # ...work...
 terraform -chdir=infra/terraform destroy -var enable_eks=true
@@ -164,6 +186,7 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0004: Structure GitOps with a root application](docs/adr/0004-gitops-structure.md)
 - [ADR 0005: Offer Kubernetes and ECS Fargate behind one API](docs/adr/0005-kubernetes-and-ecs-runtimes.md)
 - [ADR 0006: Run Terraform from GitHub Actions with access keys](docs/adr/0006-infrastructure-pipeline.md)
+- [ADR 0007: Give Argo CD repo access through a GitHub App](docs/adr/0007-argocd-repo-access.md)
 
 ## License
 [MIT](LICENSE)

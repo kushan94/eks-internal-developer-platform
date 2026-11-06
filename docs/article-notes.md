@@ -59,3 +59,12 @@ Copy this for each session:
 - **What surprised me:** This limit isn't in the Free plan's published service control policies, so reading them wasn't enough. `aws ec2 describe-instance-types --filters Name=free-tier-eligible,Values=true` lists the allowed types. In eu-north-1 those are t3/t4g micro and small, `c7i-flex.large` and `m7i-flex.large`.
 - **Fix:** Switch to `m7i-flex.large`, with 2 vCPUs and 8 GiB at $0.10 an hour.
 
+### 2026-11-06: Argo CD and private repos
+- **Goal:** Let Argo CD deploy from any approved repo, the way production platforms do.
+- **What happened:** I chose a GitHub App, with its key in Secrets Manager and External Secrets creating Argo CD's credential template. On kind, Argo CD projects blocked a `kube-system` destination, a raw Deployment and a foreign repo, and allowed an approved external repo.
+- **What surprised me:**
+  - Argo CD needs repo credentials before it can read anything from Git, so the credential path can't come from Git. It needs a small bootstrap step.
+  - With Go templates, the ApplicationSet git files generator reserves `.path` for the file's own location, which silently overrode a field with the same name.
+  - Clusters destroyed nightly rule out keeping credentials only in the cluster, and they make Sealed Secrets awkward, because each new cluster would need the decryption key.
+- **AWS cost:** about $1 for the half-built cluster from the failed apply
+
