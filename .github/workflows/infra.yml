@@ -13,7 +13,7 @@ on:
         options: [plan, apply, destroy]
         default: plan
       enable_eks:
-        description: Include the EKS cluster (about $0.33 an hour with everything else)
+        description: Include the EKS cluster (about $0.36 an hour with everything else)
         type: boolean
         default: false
   schedule:
@@ -67,6 +67,7 @@ jobs:
     env:
       TF_VAR_region: eu-north-1
       TF_VAR_allowed_cidrs: '["${{ secrets.ALLOWED_CIDR }}"]'
+      TF_VAR_cluster_admin_arns: ${{ secrets.CLUSTER_ADMIN_ARNS }}
       TF_VAR_enable_eks: ${{ inputs.enable_eks || false }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -109,6 +110,7 @@ jobs:
     env:
       TF_VAR_region: eu-north-1
       TF_VAR_allowed_cidrs: '["${{ secrets.ALLOWED_CIDR }}"]'
+      TF_VAR_cluster_admin_arns: ${{ secrets.CLUSTER_ADMIN_ARNS }}
       TF_VAR_enable_eks: ${{ inputs.enable_eks }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -144,6 +146,7 @@ jobs:
     env:
       TF_VAR_region: eu-north-1
       TF_VAR_allowed_cidrs: '["${{ secrets.ALLOWED_CIDR }}"]'
+      TF_VAR_cluster_admin_arns: ${{ secrets.CLUSTER_ADMIN_ARNS }}
       # Destroy everything in the state, whichever parts exist.
       TF_VAR_enable_eks: "true"
     steps:

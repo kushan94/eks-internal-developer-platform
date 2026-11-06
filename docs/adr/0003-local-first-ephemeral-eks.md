@@ -9,7 +9,7 @@ This is a personal study project, so idle AWS spend is the main risk. Most of th
 - Develop on kind, and use EKS only for work that needs AWS.
 - Create the EKS cluster with Terraform at the start of a session and destroy it at the end.
 - Use one AWS account in eu-north-1, with one cluster and one NAT gateway.
-- Use an on-demand managed node group, because the account is on the AWS Free plan, which denies Spot instances.
+- Use an on-demand managed node group of `m7i-flex.large` instances. The account is on the AWS Free plan, which denies Spot instances and only allows Free Tier-eligible instance types. In eu-north-1, `m7i-flex.large` is the only eligible type with 8 GiB of memory.
 - Use Pod Identity rather than IRSA, because the Free plan denies creating OIDC providers.
 - Avoid Karpenter and EKS Auto Mode while on the Free plan, because it denies `ec2:CreateFleet`, which they depend on.
 
