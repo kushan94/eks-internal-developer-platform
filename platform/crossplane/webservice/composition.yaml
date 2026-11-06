@@ -76,7 +76,7 @@ spec:
                   targetPort: {{ $xr.spec.port }}
             {{- else if eq $runtime "ecs" }}
             {{- $aws := dig "aws" dict (default dict (index .context "apiextensions.crossplane.io/environment")) }}
-            {{- range $key := list "region" "ecsClusterArn" "vpcId" "vpcCidr" "subnetIds" "taskExecutionRoleArn" }}
+            {{- range $key := list "region" "ecsClusterName" "vpcId" "vpcCidr" "subnetIds" "taskExecutionRoleArn" }}
             {{- if not (hasKey $aws $key) }}{{ fail (printf "the ECS runtime needs aws.%s in the aws-platform EnvironmentConfig" $key) }}{{ end }}
             {{- end }}
             {{- $awsName := printf "idp-%s-%s" $ns $name }}
@@ -168,7 +168,8 @@ spec:
             spec:
               forProvider:
                 region: {{ $aws.region }}
-                cluster: {{ $aws.ecsClusterArn }}
+                # The provider builds the service ID from this, so it must be the name, not the ARN.
+                cluster: {{ $aws.ecsClusterName }}
                 launchType: FARGATE
                 desiredCount: {{ $xr.spec.replicas }}
                 taskDefinitionRef:
