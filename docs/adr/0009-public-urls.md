@@ -3,10 +3,10 @@
 **Status:** Accepted (2026-11-06)
 
 ## Context
-Services need public HTTPS URLs under `skyforgelab.cloud`. The domain is registered at Porkbun, and its nameservers pointed at an Azure DNS zone that no longer answered. The platform should control only its own part of the domain.
+Services need public HTTPS URLs under `skyforgelab.cloud`. The domain is registered at Porkbun, and its nameservers pointed at an Azure DNS zone that no longer answered. The platform should control only its own part of the domain, so a working parent zone was needed too.
 
 ## Decision
-- **DNS:** Route 53 hosts only `idp.skyforgelab.cloud`, created by the bootstrap stack so its nameservers stay stable across sessions. The parent zone delegates it with four NS records.
+- **DNS:** Route 53 hosts `skyforgelab.cloud`, and the registrar points the domain at that zone. The parent zone delegates `idp.skyforgelab.cloud` to a separate zone, so the platform's tools can only change records there. Both zones are in the bootstrap stack, so their nameservers stay stable across sessions.
 - **Certificate:** a wildcard ACM certificate for `*.idp.skyforgelab.cloud`, also in the bootstrap stack and validated through Route 53. The AWS Load Balancer Controller finds it by the listener's hostname, so no certificate ARN is committed.
 - **Routing:** Gateway API on EKS. One shared Gateway in `gateway-system` becomes one internet-facing ALB.
   - HTTP redirects to HTTPS.
@@ -20,6 +20,6 @@ Services need public HTTPS URLs under `skyforgelab.cloud`. The domain is registe
 
 ## Consequences
 - **ECS:** Gateway API only routes to Kubernetes, so ECS services stay reachable only inside the VPC. Giving them public URLs needs a separate path, such as a second load balancer managed by the composition.
-- **Cost:** the shared ALB costs money while the cluster runs, and the hosted zone costs $0.50 a month.
+- **Cost:** the shared ALB costs money while the cluster runs, and the two hosted zones cost $0.50 a month each.
 - **Stale DNS:** a nightly destroy leaves ExternalDNS records pointing at a deleted ALB until the next session updates them, which it can because it owns them through its TXT records.
 - **Duplicated domain:** the domain is set in both the Gateway manifest and the `platform` EnvironmentConfig.

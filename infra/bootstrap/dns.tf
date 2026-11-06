@@ -1,11 +1,31 @@
-# DNS for public service URLs. Route 53 hosts only the platform's subdomain;
-# the parent zone delegates it with NS records. Kept in the bootstrap stack
-# because recreating the zone would change its nameservers and break the delegation.
+# DNS for public service URLs. Route 53 hosts the whole domain, and delegates
+# the platform's subdomain to its own zone, so the platform's tools can only
+# change records under that subdomain. Both zones live in the bootstrap stack,
+# because recreating a zone changes its nameservers and breaks delegation.
+
+variable "parent_domain" {
+  description = "Domain registered at the registrar, whose nameservers point at this zone."
+  type        = string
+  default     = "skyforgelab.cloud"
+}
 
 variable "platform_domain" {
   description = "Subdomain that Route 53 hosts for the platform."
   type        = string
   default     = "idp.skyforgelab.cloud"
+}
+
+resource "aws_route53_zone" "parent" {
+  name    = var.parent_domain
+  comment = "Domain apex. Set these nameservers at the registrar."
+}
+
+resource "aws_route53_record" "platform_delegation" {
+  zone_id = aws_route53_zone.parent.zone_id
+  name    = var.platform_domain
+  type    = "NS"
+  ttl     = 3600
+  records = aws_route53_zone.platform.name_servers
 }
 
 resource "aws_route53_zone" "platform" {
@@ -43,6 +63,11 @@ resource "aws_route53_record" "certificate_validation" {
 }
 
 output "platform_domain_nameservers" {
-  description = "Add these as NS records for the platform domain in the parent zone."
+  description = "Nameservers of the platform zone. The parent zone delegates to them."
   value       = aws_route53_zone.platform.name_servers
+}
+
+output "parent_domain_nameservers" {
+  description = "Set these as the domain's nameservers at the registrar."
+  value       = aws_route53_zone.parent.name_servers
 }

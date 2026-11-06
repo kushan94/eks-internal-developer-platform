@@ -54,9 +54,9 @@ Run `make test` to render the composition for both runtimes and validate the out
 On EKS, add `public: true` to a Kubernetes-runtime WebService to serve it at `https://<name>-<namespace>.idp.skyforgelab.cloud`. Its URL appears in `kubectl get webservice` and in `status.url`. One shared ALB, created from a Gateway API Gateway, serves every public service, and ExternalDNS publishes the hostnames. See [ADR 0009](docs/adr/0009-public-urls.md).
 
 One-time DNS setup:
-1. **Create the zone:** run `make bootstrap`, which creates the Route 53 zone for `idp.skyforgelab.cloud` and its wildcard certificate.
-2. **Get the nameservers:** run `terraform -chdir=infra/bootstrap output platform_domain_nameservers`.
-3. **Delegate the subdomain:** in the DNS zone for `skyforgelab.cloud`, add NS records for `idp` pointing at those four nameservers. ACM validates the certificate once they resolve.
+1. **Create the zones:** run `make bootstrap`. It creates Route 53 zones for `skyforgelab.cloud` and `idp.skyforgelab.cloud`, the delegation between them, and the wildcard certificate.
+2. **Get the nameservers:** run `terraform -chdir=infra/bootstrap output parent_domain_nameservers`.
+3. **Point the domain at Route 53:** at the registrar, set the domain's nameservers to those four. ACM validates the certificate once they resolve.
 
 ECS services stay reachable only inside the VPC for now.
 
