@@ -95,3 +95,13 @@ Copy this for each session:
 - **Fix:** Route 53 now hosts the parent zone too. The registrar points at the parent zone, and the parent delegates `idp` to its own zone with NS records.
 - **Lesson:** "delegate a subdomain" means NS records *inside the parent zone*, not changing the domain's nameservers. Writing the delegation as a Terraform resource makes the relationship explicit.
 
+### 2026-11-06: First public URL
+- **What happened:** `https://hello-demo.idp.skyforgelab.cloud` answered HTTP 200 from the internet.
+  - The certificate was found in ACM by hostname.
+  - ExternalDNS created the records.
+  - HTTP redirects to HTTPS with a 301, and unknown hosts get a 404.
+- **What surprised me:**
+  - Pods only get Pod Identity credentials if their association exists when they start. Merging the change mid-session let Argo CD start the load balancer controller 17 minutes before Terraform created its association, and a restart fixed it. In a fresh session, Terraform runs first, so this doesn't happen.
+  - Argo CD flagged the redirect HTTPRoute as OutOfSync, because the API server added default fields. Writing those defaults in Git fixed it.
+  - The load balancer controller puts `:443` in the redirect URL. It works, but isn't as clean as a plain `https://` URL.
+

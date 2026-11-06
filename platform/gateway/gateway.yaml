@@ -64,12 +64,20 @@ kind: HTTPRoute
 metadata:
   name: http-to-https
   namespace: gateway-system
+# Written with the fields the API server would default, so Argo CD's
+# comparison matches the live object.
 spec:
   parentRefs:
-    - name: platform
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: platform
       sectionName: http
   rules:
-    - filters:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      filters:
         - type: RequestRedirect
           requestRedirect:
             scheme: https
