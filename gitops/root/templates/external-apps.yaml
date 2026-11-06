@@ -1,5 +1,5 @@
 # Deploys services that live in other repos. Each file in apps/ names a repo,
-# a path inside it and a namespace, so onboarding a repo is a reviewed pull
+# a directory inside it and a namespace, so onboarding a repo is a reviewed pull
 # request to this repo.
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
@@ -25,7 +25,7 @@ spec:
       source:
         repoURL: '{{ "{{ .repoURL }}" }}'
         targetRevision: '{{ "{{ .targetRevision }}" }}'
-        path: '{{ "{{ .path }}" }}'
+        path: '{{ "{{ .directory }}" }}'
       destination:
         server: https://kubernetes.default.svc
         namespace: '{{ "{{ .namespace }}" }}'

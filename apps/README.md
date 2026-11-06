@@ -6,7 +6,7 @@ Each YAML file here deploys a folder of `WebService` files from another repo. Fo
 name: orders
 namespace: team-a
 repoURL: https://github.com/kushan94/orders-service.git
-path: deploy
+directory: deploy
 targetRevision: main
 ```
 
