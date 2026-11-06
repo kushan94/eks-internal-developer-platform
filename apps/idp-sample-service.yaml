@@ -1,0 +1,5 @@
+name: sample
+namespace: sample
+repoURL: https://github.com/kushan94/idp-sample-service.git
+directory: deploy
+targetRevision: main
