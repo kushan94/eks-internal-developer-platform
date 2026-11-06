@@ -54,3 +54,8 @@ Copy this for each session:
   - In eu-north-1, an ECS-only session costs about $0.08 an hour, and an EKS session about $0.33. The EKS control plane alone is $0.10 an hour, so a cluster can't stay up all month within $50.
 - **AWS cost:** $0 so far
 
+### 2026-11-06: First EKS apply failed
+- **What happened:** The node group failed with `The specified instance type is not eligible for Free Tier`. The EKS cluster, VPC and NAT gateway were created first, so they kept costing money until the fix.
+- **What surprised me:** This limit isn't in the Free plan's published service control policies, so reading them wasn't enough. `aws ec2 describe-instance-types --filters Name=free-tier-eligible,Values=true` lists the allowed types. In eu-north-1 those are t3/t4g micro and small, `c7i-flex.large` and `m7i-flex.large`.
+- **Fix:** Switch to `m7i-flex.large`, with 2 vCPUs and 8 GiB at $0.10 an hour.
+

@@ -7,6 +7,13 @@ set -euo pipefail
 REPO="${REPO:-$(gh repo view --json nameWithOwner --jq .nameWithOwner)}"
 ALLOWED_CIDR="${ALLOWED_CIDR:-$(curl -fsS https://checkip.amazonaws.com | tr -d '[:space:]')/32}"
 APPROVER_ID="$(gh api user --jq .id)"
+# Cluster admins: the IAM role behind your current aws login session, unless set.
+if [ -z "${CLUSTER_ADMIN_ARNS:-}" ]; then
+  caller="$(aws sts get-caller-identity --query Arn --output text)"
+  role_name="$(printf '%s' "$caller" | sed -nE 's#^arn:aws:sts::[0-9]+:assumed-role/([^/]+)/.*#\1#p')"
+  [ -n "$role_name" ] || { echo "Set CLUSTER_ADMIN_ARNS, or run this signed in with aws login." >&2; exit 1; }
+  CLUSTER_ADMIN_ARNS="[\"$(aws iam get-role --role-name "$role_name" --query Role.Arn --output text)\"]"
+fi
 out() { terraform -chdir=infra/bootstrap output -raw "$1"; }
 
 # Plans run for pull requests, so this environment has no branch restriction.
@@ -33,6 +40,7 @@ set_secret() { gh secret set "$2" --repo "$REPO" --env "$1"; }
 for env in aws-plan aws-apply aws-destroy; do
   out state_bucket | set_secret "$env" TF_STATE_BUCKET
   printf '%s' "$ALLOWED_CIDR" | set_secret "$env" ALLOWED_CIDR
+  printf '%s' "$CLUSTER_ADMIN_ARNS" | set_secret "$env" CLUSTER_ADMIN_ARNS
 done
 out github_plan_access_key_id | set_secret aws-plan AWS_ACCESS_KEY_ID
 out github_plan_secret_access_key | set_secret aws-plan AWS_SECRET_ACCESS_KEY

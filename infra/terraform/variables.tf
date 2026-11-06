@@ -25,3 +25,13 @@ variable "enable_eks" {
   type        = bool
   default     = false
 }
+
+variable "cluster_admin_arns" {
+  description = "IAM role or user ARNs that get cluster admin access and administer the EKS KMS key, such as the role you use with aws login."
+  type        = list(string)
+
+  validation {
+    condition     = length(var.cluster_admin_arns) > 0
+    error_message = "Name at least one cluster admin."
+  }
+}

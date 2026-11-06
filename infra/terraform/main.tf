@@ -42,7 +42,21 @@ module "eks" {
   endpoint_public_access       = true
   endpoint_public_access_cidrs = var.allowed_cidrs
 
-  enable_cluster_creator_admin_permissions = true
+  # Name the admins explicitly. Granting admin to whoever runs Terraform would
+  # lock you out when the pipeline applies, and change access on every run.
+  enable_cluster_creator_admin_permissions = false
+  kms_key_administrators                   = var.cluster_admin_arns
+  access_entries = {
+    for i, arn in var.cluster_admin_arns : "admin-${i}" => {
+      principal_arn = arn
+      policy_associations = {
+        admin = {
+          policy_arn   = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = { type = "cluster" }
+        }
+      }
+    }
+  }
 
   # Pod Identity replaces IRSA, and the AWS Free plan denies creating OIDC providers.
   enable_irsa = false
@@ -60,9 +74,10 @@ module "eks" {
   eks_managed_node_groups = {
     system = {
       ami_type = "AL2023_x86_64_STANDARD"
-      # The AWS Free plan denies Spot instances.
+      # The AWS Free plan denies Spot instances and only allows Free Tier-eligible
+      # types. m7i-flex.large is the only eligible type with 8 GiB of memory.
       capacity_type  = "ON_DEMAND"
-      instance_types = ["t3.large"]
+      instance_types = ["m7i-flex.large"]
 
       min_size     = 2
       max_size     = 3
