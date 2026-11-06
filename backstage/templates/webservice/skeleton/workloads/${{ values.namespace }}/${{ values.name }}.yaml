@@ -7,3 +7,4 @@ spec:
   image: ${{ values.image }}
   port: ${{ values.port }}
   replicas: ${{ values.replicas }}
+  public: ${{ values.public }}

@@ -8,7 +8,8 @@ spec:
     kind: WebService
   mode: Pipeline
   pipeline:
-    # Account-specific AWS settings, such as subnets and the ECS cluster. Only the ECS runtime needs them.
+    # Shared platform settings, such as the public domain, and account-specific
+    # AWS settings, such as subnets and the ECS cluster.
     - step: load-environment
       functionRef:
         name: function-environment-configs
@@ -17,6 +18,9 @@ spec:
         kind: Input
         spec:
           environmentConfigs:
+            - type: Reference
+              ref:
+                name: platform
             - type: Reference
               ref:
                 name: aws-platform
@@ -36,6 +40,7 @@ spec:
             {{- $name := $xr.metadata.name }}
             {{- $ns := $xr.metadata.namespace }}
             {{- $runtime := default "kubernetes" $xr.spec.runtime }}
+            {{- $env := default dict (index .context "apiextensions.crossplane.io/environment") }}
             {{- if eq $runtime "kubernetes" }}
             {{- $available := dig "deployment" "resource" "status" "availableReplicas" 0 (default dict .observed.resources) }}
             apiVersion: apps/v1
@@ -74,8 +79,39 @@ spec:
               ports:
                 - port: 80
                   targetPort: {{ $xr.spec.port }}
+            {{- if $xr.spec.public }}
+            {{- $platform := dig "platform" dict $env }}
+            {{- if not (and $platform.domain $platform.gateway) }}{{ fail "public WebServices need platform.domain and platform.gateway in the platform EnvironmentConfig" }}{{ end }}
+            {{- /* One label under the domain, so the wildcard certificate covers it. */}}
+            {{- $host := printf "%s-%s.%s" $name $ns $platform.domain }}
+            ---
+            apiVersion: gateway.networking.k8s.io/v1
+            kind: HTTPRoute
+            metadata:
+              name: {{ $name }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: route
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              parentRefs:
+                - name: {{ $platform.gateway.name }}
+                  namespace: {{ $platform.gateway.namespace }}
+                  sectionName: {{ $platform.gateway.sectionName }}
+              hostnames:
+                - {{ $host }}
+              rules:
+                - backendRefs:
+                    - name: {{ $name }}
+                      port: 80
+            ---
+            apiVersion: platform.example.org/v1alpha1
+            kind: WebService
+            status:
+              url: https://{{ $host }}
+            {{- end }}
             {{- else if eq $runtime "ecs" }}
-            {{- $aws := dig "aws" dict (default dict (index .context "apiextensions.crossplane.io/environment")) }}
+            {{- if $xr.spec.public }}{{ fail "public URLs are only available for the kubernetes runtime for now" }}{{ end }}
+            {{- $aws := dig "aws" dict $env }}
             {{- range $key := list "region" "ecsClusterName" "vpcId" "vpcCidr" "subnetIds" "taskExecutionRoleArn" }}
             {{- if not (hasKey $aws $key) }}{{ fail (printf "the ECS runtime needs aws.%s in the aws-platform EnvironmentConfig" $key) }}{{ end }}
             {{- end }}

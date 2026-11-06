@@ -9,9 +9,14 @@ spec:
   sourceRepos:
     - {{ .Values.repoURL }}
     - https://charts.crossplane.io/stable
+    - https://aws.github.io/eks-charts
+    - https://kubernetes-sigs.github.io/external-dns/
+    - https://github.com/kubernetes-sigs/gateway-api.git
   destinations:
+    {{- range list "crossplane-system" "aws-load-balancer-controller" "external-dns" "gateway-system" }}
     - server: https://kubernetes.default.svc
-      namespace: crossplane-system
+      namespace: {{ . }}
+    {{- end }}
   clusterResourceWhitelist:
     - group: "*"
       kind: "*"
@@ -31,7 +36,7 @@ spec:
   destinations:
     - server: https://kubernetes.default.svc
       namespace: "*"
-    {{- range list "default" "argocd" "crossplane-system" "external-secrets" "kube-*" }}
+    {{- range list "default" "argocd" "crossplane-system" "external-secrets" "aws-load-balancer-controller" "external-dns" "gateway-system" "kube-*" }}
     - server: https://kubernetes.default.svc
       namespace: "!{{ . }}"
     {{- end }}

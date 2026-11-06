@@ -8,3 +8,8 @@ aws:
 
 # GitHub account whose repos teams can deploy from.
 githubOwner: kushan94
+
+# Public URLs, used when aws.enabled is true.
+clusterName: idp
+region: eu-north-1
+domain: idp.skyforgelab.cloud

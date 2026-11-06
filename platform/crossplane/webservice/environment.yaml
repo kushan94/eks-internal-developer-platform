@@ -1,0 +1,13 @@
+# Settings that every WebService shares and that are safe to commit. Account-
+# specific AWS values live in the aws-platform EnvironmentConfig instead.
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: platform
+data:
+  platform:
+    domain: idp.skyforgelab.cloud
+    gateway:
+      name: platform
+      namespace: gateway-system
+      sectionName: https

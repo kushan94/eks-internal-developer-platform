@@ -86,8 +86,14 @@ test: ## Render the WebService composition for both runtimes and validate it aga
 	$(CROSSPLANE) render --include-full-xr tests/render/xr-ecs.yaml \
 		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml \
 		--extra-resources platform/crossplane/aws/environment.example.yaml > .test/ecs.yaml
+	$(CROSSPLANE) render --include-full-xr tests/render/xr-public.yaml \
+		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml \
+		--extra-resources platform/crossplane/webservice/environment.yaml > .test/public.yaml
+	curl -fsSL -o .test/schemas/httproutes.yaml \
+		https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.6.0/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/kubernetes.yaml
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/ecs.yaml
+	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/public.yaml
 
 bootstrap: ## Create the Terraform state bucket and GitHub IAM users (once, from your laptop)
 	terraform -chdir=infra/bootstrap init
