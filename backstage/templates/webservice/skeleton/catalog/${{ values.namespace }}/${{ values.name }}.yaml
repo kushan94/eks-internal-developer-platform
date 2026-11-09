@@ -17,3 +17,6 @@ spec:
   system: idp-services
   dependsOn:
     - resource:default/${{ 'ecs-cluster' if values.runtime == 'ecs' else 'eks-cluster' }}
+{%- if values.database == 'managed' %}
+    - resource:default/shared-postgres
+{%- endif %}

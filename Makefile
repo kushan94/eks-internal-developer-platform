@@ -84,7 +84,7 @@ aws-environment: ## Apply the aws-platform EnvironmentConfig from Terraform outp
 	$(KUBECTL) wait crd environmentconfigs.apiextensions.crossplane.io --for=condition=Established --timeout=60s
 	terraform -chdir=infra/terraform output -raw aws_platform_environment | $(KUBECTL) apply -f -
 
-test: ## Render the WebService composition for both runtimes and validate it against the provider schemas
+test: ## Render the WebService composition for both runtimes and each database class, and validate it against the provider schemas
 	@rm -rf .test && mkdir -p .test/schemas
 	cp platform/crossplane/aws/providers.yaml platform/crossplane/webservice/definition.yaml .test/schemas/
 	$(CROSSPLANE) render --include-full-xr tests/render/xr-kubernetes.yaml \
@@ -95,11 +95,26 @@ test: ## Render the WebService composition for both runtimes and validate it aga
 	$(CROSSPLANE) render --include-full-xr tests/render/xr-public.yaml \
 		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml \
 		--extra-resources platform/crossplane/webservice/environment.yaml > .test/public.yaml
+	$(CROSSPLANE) render --include-full-xr tests/render/xr-db-in-cluster.yaml \
+		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml > .test/db-in-cluster.yaml
+	$(CROSSPLANE) render --include-full-xr tests/render/xr-db-managed.yaml \
+		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml \
+		--extra-resources platform/managed-postgres/local/shared-postgres.yaml > .test/db-managed.yaml
+	$(CROSSPLANE) render --include-full-xr tests/render/xr-db-managed-ecs.yaml \
+		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml \
+		--extra-resources platform/crossplane/aws/environment.example.yaml \
+		--observed-resources tests/render/observed-db-managed-ecs.yaml > .test/db-managed-ecs.yaml
+	cp platform/crossplane/webservice/provider-sql.yaml .test/schemas/
 	curl -fsSL -o .test/schemas/httproutes.yaml \
 		https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.6.0/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml
+	curl -fsSL -o .test/schemas/cnpg-clusters.yaml \
+		https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/v1.30.1/config/crd/bases/postgresql.cnpg.io_clusters.yaml
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/kubernetes.yaml
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/ecs.yaml
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/public.yaml
+	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/db-in-cluster.yaml
+	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/db-managed.yaml
+	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/db-managed-ecs.yaml
 
 bootstrap: ## Create the Terraform state bucket and GitHub IAM users (once, from your laptop)
 	terraform -chdir=infra/bootstrap init

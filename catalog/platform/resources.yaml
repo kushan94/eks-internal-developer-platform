@@ -36,6 +36,21 @@ spec:
 apiVersion: backstage.io/v1alpha1
 kind: Resource
 metadata:
+  name: shared-postgres
+  title: Shared Postgres
+  description: >-
+    RDS PostgreSQL 18 shared by services with a managed database. Each service
+    gets its own database and login on it. Created per session.
+spec:
+  type: database
+  owner: group:default/platform-team
+  system: idp-platform
+  dependsOn:
+    - resource:default/eks-cluster
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
   name: idp-gateway
   title: Public gateway
   description: Shared ALB that serves every public URL under idp.skyforgelab.cloud

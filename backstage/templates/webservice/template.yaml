@@ -13,6 +13,16 @@ spec:
 
   parameters:
     - title: Service details
+      # In-cluster databases run next to Kubernetes pods, so ECS services can't use them.
+      if:
+        properties:
+          runtime:
+            const: ecs
+      then:
+        properties:
+          database:
+            not:
+              const: in-cluster
       required:
         - name
         - namespace
@@ -74,6 +84,20 @@ spec:
           type: boolean
           default: false
           description: Serve the service at https://<name>-<namespace>.idp.skyforgelab.cloud. Kubernetes runtime only, for now.
+        database:
+          title: Database
+          type: string
+          description: >-
+            A PostgreSQL database. Your container gets PGHOST, PGPORT, PGDATABASE,
+            PGUSER, PGPASSWORD and PGSSLMODE (and DATABASE_URL on Kubernetes).
+          default: none
+          oneOf:
+            - const: none
+              title: None
+            - const: managed
+              title: Managed (shared RDS, works with both runtimes)
+            - const: in-cluster
+              title: In-cluster (CloudNativePG, Kubernetes runtime only)
 
   steps:
     - id: render
@@ -90,6 +114,7 @@ spec:
           port: ${{ parameters.port }}
           replicas: ${{ parameters.replicas }}
           public: ${{ parameters.public }}
+          database: ${{ parameters.database }}
 
     - id: pull-request
       name: Open pull request
@@ -99,7 +124,7 @@ spec:
         branchName: webservice-${{ parameters.namespace }}-${{ parameters.name }}
         title: Add WebService ${{ parameters.namespace }}/${{ parameters.name }}
         description: |
-          Adds the `${{ parameters.name }}` WebService to the `${{ parameters.namespace }}` namespace, running on `${{ parameters.runtime }}`.
+          Adds the `${{ parameters.name }}` WebService to the `${{ parameters.namespace }}` namespace, running on `${{ parameters.runtime }}`, with database: `${{ parameters.database }}`.
 
           Created from the Backstage Web Service template. Argo CD deploys it after this pull request is merged.
 

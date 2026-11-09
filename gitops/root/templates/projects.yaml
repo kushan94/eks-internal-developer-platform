@@ -13,8 +13,9 @@ spec:
     - https://kubernetes-sigs.github.io/external-dns/
     - https://github.com/kubernetes-sigs/gateway-api.git
     - https://backstage.github.io/charts
+    - https://cloudnative-pg.github.io/charts
   destinations:
-    {{- range list "crossplane-system" "aws-load-balancer-controller" "external-dns" "gateway-system" "backstage" }}
+    {{- range list "crossplane-system" "aws-load-balancer-controller" "external-dns" "gateway-system" "backstage" "cnpg-system" }}
     - server: https://kubernetes.default.svc
       namespace: {{ . }}
     {{- end }}
@@ -37,7 +38,7 @@ spec:
   destinations:
     - server: https://kubernetes.default.svc
       namespace: "*"
-    {{- range list "default" "argocd" "crossplane-system" "external-secrets" "aws-load-balancer-controller" "external-dns" "gateway-system" "backstage" "kube-*" }}
+    {{- range list "default" "argocd" "crossplane-system" "external-secrets" "aws-load-balancer-controller" "external-dns" "gateway-system" "backstage" "cnpg-system" "kube-*" }}
     - server: https://kubernetes.default.svc
       namespace: "!{{ . }}"
     {{- end }}

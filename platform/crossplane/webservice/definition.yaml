@@ -19,6 +19,9 @@ spec:
         - name: URL
           type: string
           jsonPath: .status.url
+        - name: Database
+          type: string
+          jsonPath: .spec.database.class
       schema:
         openAPIV3Schema:
           type: object
@@ -47,9 +50,34 @@ spec:
                   type: boolean
                   default: false
                   description: Give the service a public HTTPS URL. Kubernetes runtime only, for now.
+                database:
+                  type: object
+                  description: >-
+                    A PostgreSQL database for the service. The container gets
+                    PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD and PGSSLMODE,
+                    and on Kubernetes also DATABASE_URL.
+                  required: [class]
+                  properties:
+                    class:
+                      type: string
+                      enum: [managed, in-cluster]
+                      description: >-
+                        managed: a database and login on the platform's shared
+                        Postgres server (RDS on AWS). in-cluster: a CloudNativePG
+                        Postgres cluster next to the service, Kubernetes runtime only.
             status:
               type: object
               properties:
                 url:
                   type: string
                   description: Public URL, when spec.public is true.
+                database:
+                  type: object
+                  properties:
+                    host:
+                      type: string
+                    name:
+                      type: string
+                    secretName:
+                      type: string
+                      description: Kubernetes Secret that holds the database login.
