@@ -123,3 +123,8 @@ Copy this for each session:
   - The ECR address includes the account ID, which shouldn't be in Git, so it's passed in when the root app is applied.
   - BuildKit features in the Dockerfile need the buildx plugin, which Colima doesn't include.
 
+### 2026-11-09: First Backstage deploy on EKS
+- **What happened:** The apply first failed on an apostrophe in a security group description, which EC2 rejects. Validation and planning can't catch that. After the fix, RDS came up, and External Secrets synced both secrets through Pod Identity. Backstage then crash-looped with `Invalid type in config for key 'backend.listen'`.
+- **Cause:** The Helm chart sets `APP_CONFIG_backend_listen_port`, which makes `backend.listen` an object, while the generated production config had the string `':7007'`. My local smoke test didn't set that variable, so it passed.
+- **Lesson:** Smoke tests should use the same environment as the deployment. Rerunning the old image with the chart's variable reproduced the crash, and the fixed image started cleanly.
+

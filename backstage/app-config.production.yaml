@@ -7,7 +7,10 @@ app:
 
 backend:
   baseUrl: https://backstage.idp.skyforgelab.cloud
-  listen: ':7007'
+  # An object, not ':7007': the Helm chart sets APP_CONFIG_backend_listen_port,
+  # and Backstage can't merge that into a string.
+  listen:
+    port: 7007
   cors:
     origin: https://backstage.idp.skyforgelab.cloud
   database:
