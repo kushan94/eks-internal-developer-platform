@@ -59,6 +59,25 @@ resource "aws_iam_user_policy" "github_plan_lock" {
   })
 }
 
+# Terraform reads secret values to refresh the secrets it writes itself, such
+# as database logins. The plan user can already read those values in the
+# state, so this adds no access, and it can't read any other secret.
+resource "aws_iam_user_policy" "github_plan_terraform_secrets" {
+  name = "read-terraform-secrets"
+  user = aws_iam_user.github_plan.name
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = "secretsmanager:GetSecretValue"
+      Resource = [
+        "arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:idp/backstage/database-*",
+        "arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:idp/platform/shared-postgres-*",
+      ]
+    }]
+  })
+}
+
 # Runs terraform apply and destroy, only from GitHub environments that need approval or run on main.
 resource "aws_iam_user" "github_apply" {
   name = "github-apply"
