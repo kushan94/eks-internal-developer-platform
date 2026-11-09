@@ -41,12 +41,16 @@ spec:
             {{- $ns := $xr.metadata.namespace }}
             {{- $runtime := default "kubernetes" $xr.spec.runtime }}
             {{- $env := default dict (index .context "apiextensions.crossplane.io/environment") }}
+            {{- /* Lets Backstage's Kubernetes plugin find everything this WebService creates. */}}
+            {{- $backstageId := printf "%s-%s" $ns $name }}
             {{- if eq $runtime "kubernetes" }}
             {{- $available := dig "deployment" "resource" "status" "availableReplicas" 0 (default dict .observed.resources) }}
             apiVersion: apps/v1
             kind: Deployment
             metadata:
               name: {{ $name }}
+              labels:
+                backstage.io/kubernetes-id: {{ $backstageId }}
               annotations:
                 gotemplating.fn.crossplane.io/composition-resource-name: deployment
                 gotemplating.fn.crossplane.io/ready: {{ if ge (int $available) (int $xr.spec.replicas) }}"True"{{ else }}"False"{{ end }}
@@ -59,6 +63,7 @@ spec:
                 metadata:
                   labels:
                     app.kubernetes.io/name: {{ $name }}
+                    backstage.io/kubernetes-id: {{ $backstageId }}
                 spec:
                   containers:
                     - name: app
@@ -70,6 +75,8 @@ spec:
             kind: Service
             metadata:
               name: {{ $name }}
+              labels:
+                backstage.io/kubernetes-id: {{ $backstageId }}
               annotations:
                 gotemplating.fn.crossplane.io/composition-resource-name: service
                 gotemplating.fn.crossplane.io/ready: "True"
@@ -89,6 +96,8 @@ spec:
             kind: HTTPRoute
             metadata:
               name: {{ $name }}
+              labels:
+                backstage.io/kubernetes-id: {{ $backstageId }}
               annotations:
                 gotemplating.fn.crossplane.io/composition-resource-name: route
                 gotemplating.fn.crossplane.io/ready: "True"

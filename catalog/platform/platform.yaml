@@ -1,0 +1,87 @@
+# The platform itself, so the catalog shows what runs every service and who owns it.
+apiVersion: backstage.io/v1alpha1
+kind: Domain
+metadata:
+  name: platform
+  description: The internal developer platform and the services it runs
+spec:
+  owner: group:default/platform-team
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: idp-platform
+  title: Internal developer platform
+  description: Argo CD, Crossplane and Backstage on EKS, with ECS Fargate as a second runtime
+  annotations:
+    github.com/project-slug: kushan94/eks-internal-developer-platform
+spec:
+  owner: group:default/platform-team
+  domain: platform
+---
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: idp-services
+  title: Platform services
+  description: Services that teams deploy through the WebService API
+spec:
+  owner: group:default/platform-team
+  domain: platform
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: backstage
+  title: Backstage
+  description: The developer portal
+  links:
+    - url: https://backstage.idp.skyforgelab.cloud
+      title: Backstage
+  annotations:
+    github.com/project-slug: kushan94/eks-internal-developer-platform
+    argocd/app-name: backstage
+    backstage.io/kubernetes-id: backstage
+spec:
+  type: website
+  lifecycle: experimental
+  owner: group:default/platform-team
+  system: idp-platform
+  dependsOn:
+    - resource:default/eks-cluster
+    - resource:default/backstage-db
+    - resource:default/idp-gateway
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: argo-cd
+  title: Argo CD
+  description: Deploys the platform and every service from Git
+  annotations:
+    github.com/project-slug: kushan94/eks-internal-developer-platform
+spec:
+  type: service
+  lifecycle: experimental
+  owner: group:default/platform-team
+  system: idp-platform
+  dependsOn:
+    - resource:default/eks-cluster
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: crossplane
+  title: Crossplane
+  description: Turns WebServices into Kubernetes or ECS Fargate resources
+  annotations:
+    github.com/project-slug: kushan94/eks-internal-developer-platform
+    argocd/app-name: crossplane
+spec:
+  type: service
+  lifecycle: experimental
+  owner: group:default/platform-team
+  system: idp-platform
+  dependsOn:
+    - resource:default/eks-cluster
+    - resource:default/ecs-cluster

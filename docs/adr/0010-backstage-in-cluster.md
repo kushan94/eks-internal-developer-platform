@@ -23,3 +23,14 @@ Backstage ran only on a laptop, with guest sign-in, an allow-all policy and a pe
 - **Bot commits:** CI commits to `main`. With branch protection, the workflow would need to open a pull request instead.
 - **Permissions:** the allow-all permission policy remains, so every signed-in user can do everything. That's acceptable while only the catalog's users can sign in.
 - **Double escaping:** `extraDeploy` goes through Helm's `tpl`, so the ExternalSecret placeholders need escaping twice.
+
+## Update (2026-11-09): catalog model and Kubernetes plugin
+- **Catalog model:** the catalog models the platform itself.
+  - A `platform` Domain, with an `idp-platform` System for Backstage, Argo CD and Crossplane, and an `idp-services` System for team services.
+  - `Resource`s for the EKS and ECS clusters, the database, the shared gateway and DNS.
+  - Services name their system and owner, and depend on the cluster their runtime uses. The Web Service template sets this from the runtime.
+- **Kubernetes plugin:** shows each service's pods, Deployment, Service, `WebService` and HTTPRoute on its page.
+  - The composition labels everything it creates with `backstage.io/kubernetes-id`.
+  - Backstage reads the cluster as its own service account, with read-only access that excludes Secrets and ConfigMaps.
+  - Metrics lookups are skipped until the cluster has a metrics-server.
+

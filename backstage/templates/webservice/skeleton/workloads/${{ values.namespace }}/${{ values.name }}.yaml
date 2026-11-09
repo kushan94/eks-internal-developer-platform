@@ -2,6 +2,8 @@ apiVersion: platform.example.org/v1alpha1
 kind: WebService
 metadata:
   name: ${{ values.name }}
+  labels:
+    backstage.io/kubernetes-id: ${{ values.namespace }}-${{ values.name }}
 spec:
   runtime: ${{ values.runtime }}
   image: ${{ values.image }}

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Deletes the DNS records that ExternalDNS created in a Route 53 zone, found by
-# the owner ID in its TXT ownership records. Run when destroying the cluster, so
+# the owner ID in its TXT ownership records, after removing ExternalDNS's
+# permissions so it can't recreate them. The owner ID is the cluster name. Run when destroying the cluster, so
 # no records point at a deleted load balancer. Set DRY_RUN=1 to only list them.
 set -euo pipefail
 
@@ -12,6 +13,16 @@ zone_id="$(aws route53 list-hosted-zones-by-name --dns-name "$ZONE" \
 if [ -z "$zone_id" ] || [ "$zone_id" = None ]; then
   echo "No hosted zone named $ZONE."
   exit 0
+fi
+
+# Stop ExternalDNS first. It syncs every minute while the cluster is being
+# destroyed, so it would otherwise recreate the records deleted below.
+external_dns_role="$OWNER-external-dns"
+if [ "${DRY_RUN:-0}" != 1 ] && aws iam get-role-policy --role-name "$external_dns_role" --policy-name platform-zone-records > /dev/null 2>&1; then
+  echo "Removing ExternalDNS's AWS permissions"
+  aws iam delete-role-policy --role-name "$external_dns_role" --policy-name platform-zone-records
+  # IAM changes take a few seconds to apply everywhere.
+  sleep 15
 fi
 
 records="$(aws route53 list-resource-record-sets --hosted-zone-id "$zone_id" --output json)"

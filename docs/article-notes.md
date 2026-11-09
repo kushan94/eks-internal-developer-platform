@@ -128,3 +128,10 @@ Copy this for each session:
 - **Cause:** The Helm chart sets `APP_CONFIG_backend_listen_port`, which makes `backend.listen` an object, while the generated production config had the string `':7007'`. My local smoke test didn't set that variable, so it passed.
 - **Lesson:** Smoke tests should use the same environment as the deployment. Rerunning the old image with the chart's variable reproduced the crash, and the fixed image started cleanly.
 
+### 2026-11-09: Catalog model and Kubernetes plugin
+- **What happened:** On kind, Backstage loaded the platform model with no errors. Running as its own service account, it found the demo's pods, Deployment, Service, `WebService` and HTTPRoute.
+- **What surprised me:**
+  - The demo `WebService` failed completely on kind, because `public: true` creates an HTTPRoute and kind had no Gateway API CRDs. The CRDs are now installed on every cluster.
+  - The destroy cleanup deleted ExternalDNS's records, but ExternalDNS was still running and recreated them within a minute, the same race the load balancer controller had. It now loses its permissions first.
+  - The Kubernetes plugin asks for ConfigMaps and metrics by default, which showed as errors with least-privilege RBAC and no metrics-server. `kubernetes.objectTypes` and `skipMetricsLookup` fixed both.
+
