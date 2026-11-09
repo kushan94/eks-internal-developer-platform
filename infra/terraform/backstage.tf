@@ -16,7 +16,7 @@ resource "aws_db_subnet_group" "backstage" {
 resource "aws_security_group" "backstage_db" {
   count       = var.enable_eks ? 1 : 0
   name        = "${var.cluster_name}-backstage-db"
-  description = "Postgres for Backstage, reachable only from the cluster's nodes and pods"
+  description = "Postgres for Backstage. Reachable only from the EKS nodes and pods."
   vpc_id      = module.vpc.vpc_id
 }
 
@@ -63,7 +63,7 @@ resource "aws_db_instance" "backstage" {
 resource "aws_secretsmanager_secret" "backstage_db" {
   count                   = var.enable_eks ? 1 : 0
   name                    = "idp/backstage/database"
-  description             = "Backstage's Postgres connection. Recreated every session."
+  description             = "Postgres connection for Backstage. Recreated every session."
   recovery_window_in_days = 0
 }
 
