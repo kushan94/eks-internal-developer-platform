@@ -164,3 +164,12 @@ Copy this for each session:
   - Every `terraform plan` failed while a session was running, because refreshing a Secrets Manager secret version reads its value, and AWS's ReadOnlyAccess policy doesn't allow that. Earlier plans had only passed because nothing was deployed. The plan user can now read the two secrets Terraform writes, which it could already read in the state.
   - My first password comparison said they differed. The AWS CLI's text output adds a newline, so I was hashing different strings. Another test that fails for the wrong reason.
 
+### 2026-11-09: A demo app and a repeatable database test
+- **What happened:**
+  - `visits` is a 100-line Go app that counts page views in Postgres. It connects with `DATABASE_URL`, or the `PG*` variables when that isn't set, so one image works with both classes and both runtimes. It's built for amd64 and arm64 and published to GitHub's registry, so no AWS account ID ends up in Git.
+  - On kind, its two replicas shared one count in their own database, over TLS.
+  - `make test-db` runs the whole database check in about a minute on kind: both classes Ready in 26 seconds, logins over TLS, isolation, and nothing left on the shared server after deletion.
+  - On EKS it passed the same checks against RDS and EBS, with both classes Ready in 86 seconds.
+  - Meanwhile, the golden path worked end to end on EKS: a service created in Backstage with a managed database became a pull request from the app's bot, and once it was merged, Argo CD and Crossplane gave it its own database on RDS.
+- **What surprised me:** The test script's first run failed three checks that had actually passed. Postgres prints a boolean as `true` when it's joined into text but as `t` on its own, and macOS `paste` needs `-` to read stdin. The checks were right; the assertions weren't.
+
