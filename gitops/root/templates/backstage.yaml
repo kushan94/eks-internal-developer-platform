@@ -1,0 +1,91 @@
+{{- if and .Values.aws.enabled .Values.backstage.imageTag }}
+# Backstage, from the image CI builds into ECR. The registry address includes
+# the AWS account ID, so it comes from the root app's awsAccountId parameter
+# rather than from Git. Skipped until CI has built a first image.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: backstage
+  namespace: argocd
+spec:
+  project: platform
+  source:
+    repoURL: https://backstage.github.io/charts
+    chart: backstage
+    targetRevision: 2.10.2
+    helm:
+      valuesObject:
+        backstage:
+          image:
+            registry: {{ required "awsAccountId is required for Backstage" .Values.awsAccountId }}.dkr.ecr.{{ .Values.region }}.amazonaws.com
+            repository: idp/backstage
+            tag: {{ .Values.backstage.imageTag | quote }}
+          args: ["--config", "app-config.yaml", "--config", "app-config.production.yaml"]
+          extraEnvVarsSecrets: [backstage-github-app, backstage-database]
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { memory: 1Gi }
+        httpRoute:
+          enabled: true
+          parentRefs:
+            - name: platform
+              namespace: gateway-system
+              sectionName: https
+          hostnames: [backstage.{{ .Values.domain }}]
+        extraDeploy:
+          # Secrets from AWS Secrets Manager, through External Secrets. The
+          # placeholders are escaped twice: this chart renders them once, and
+          # the Backstage chart passes extraDeploy through tpl again.
+          - apiVersion: external-secrets.io/v1
+            kind: ExternalSecret
+            metadata:
+              name: backstage-github-app
+            spec:
+              refreshInterval: 1h
+              secretStoreRef: { kind: ClusterSecretStore, name: aws-secrets-manager }
+              dataFrom:
+                - extract: { key: idp/backstage/github-app }
+              target:
+                name: backstage-github-app
+                template:
+                  engineVersion: v2
+                  data:
+                    GITHUB_APP_ID: '{{`{{ "{{ .appId }}" }}`}}'
+                    AUTH_GITHUB_CLIENT_ID: '{{`{{ "{{ .clientId }}" }}`}}'
+                    AUTH_GITHUB_CLIENT_SECRET: '{{`{{ "{{ .clientSecret }}" }}`}}'
+                    GITHUB_APP_PRIVATE_KEY: '{{`{{ "{{ .privateKey }}" }}`}}'
+                    GITHUB_APP_WEBHOOK_SECRET: '{{`{{ "{{ .webhookSecret }}" }}`}}'
+          - apiVersion: external-secrets.io/v1
+            kind: ExternalSecret
+            metadata:
+              name: backstage-database
+            spec:
+              refreshInterval: 1h
+              secretStoreRef: { kind: ClusterSecretStore, name: aws-secrets-manager }
+              dataFrom:
+                - extract: { key: idp/backstage/database }
+              target:
+                name: backstage-database
+                template:
+                  engineVersion: v2
+                  data:
+                    POSTGRES_HOST: '{{`{{ "{{ .host }}" }}`}}'
+                    POSTGRES_PORT: '{{`{{ "{{ .port }}" }}`}}'
+                    POSTGRES_USER: '{{`{{ "{{ .user }}" }}`}}'
+                    POSTGRES_PASSWORD: '{{`{{ "{{ .password }}" }}`}}'
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: backstage
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 20
+      backoff:
+        duration: 15s
+        factor: 2
+        maxDuration: 2m
+{{- end }}

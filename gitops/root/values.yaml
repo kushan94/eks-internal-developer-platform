@@ -13,3 +13,11 @@ githubOwner: kushan94
 clusterName: idp
 region: eu-north-1
 domain: idp.skyforgelab.cloud
+
+# Set by `make gitops` on EKS, so the account ID stays out of Git.
+awsAccountId: ""
+
+backstage:
+  # Written by the Backstage image workflow after each build. Empty until the
+  # first build, which keeps Backstage out of the cluster until there's an image.
+  imageTag: ""

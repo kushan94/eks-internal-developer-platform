@@ -111,3 +111,15 @@ Copy this for each session:
   - ExternalDNS records outlived the ALB they pointed at, so the destroy now deletes them, using ExternalDNS's own TXT ownership records to pick only its records.
 - **What surprised me:** GitHub ran the nightly destroy about 3 hours late. Scheduled workflows aren't punctual, so they're a safety net, not a timer.
 
+### 2026-11-09: Backstage in the cluster
+- **Goal:** Run Backstage on EKS with GitHub sign-in, RDS and no personal credentials.
+- **What happened:**
+  - The multi-stage image built in under 3 minutes with caching.
+  - Against a real Postgres 18, the backend was ready in 9 seconds and created 13 plugin databases.
+  - Guest sign-in is refused in production, and GitHub sign-in redirects correctly.
+- **What surprised me:**
+  - The Backstage chart passes `extraDeploy` through `tpl`, which silently turned every ExternalSecret placeholder into an empty string. Rendering the real chart caught it, and the fix was escaping them twice.
+  - Recent PostgreSQL versions on RDS require TLS, so the image now includes the RDS CA bundle, pinned by checksum.
+  - The ECR address includes the account ID, which shouldn't be in Git, so it's passed in when the root app is applied.
+  - BuildKit features in the Dockerfile need the buildx plugin, which Colima doesn't include.
+

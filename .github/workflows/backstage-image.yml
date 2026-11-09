@@ -1,0 +1,58 @@
+name: Backstage image
+
+# Builds the Backstage image on every change to backstage/ on main, pushes it
+# to ECR, then records the new tag in Git so Argo CD deploys it.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - backstage/**
+      - .github/workflows/backstage-image.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: backstage-image
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: eu-north-1
+  REPOSITORY: idp/backstage
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Holds only the push-only ECR user's key.
+    environment: aws-build
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          mask-aws-account-id: true
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build and push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: backstage
+          file: backstage/Dockerfile
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/${{ env.REPOSITORY }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Deploy the new image through Git
+        run: |
+          sed -i -E "s|^  imageTag: .*|  imageTag: \"${GITHUB_SHA}\"|" gitops/root/values.yaml
+          git diff --quiet && { echo "Tag unchanged."; exit 0; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Deploy Backstage ${GITHUB_SHA::7}"
+          git push
+          echo "Deployed Backstage image ${GITHUB_SHA::7}." >> "$GITHUB_STEP_SUMMARY"
