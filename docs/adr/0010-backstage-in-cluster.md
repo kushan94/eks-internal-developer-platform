@@ -33,4 +33,9 @@ Backstage ran only on a laptop, with guest sign-in, an allow-all policy and a pe
   - The composition labels everything it creates with `backstage.io/kubernetes-id`.
   - Backstage reads the cluster as its own service account, with read-only access that excludes Secrets and ConfigMaps.
   - Metrics lookups are skipped until the cluster has a metrics-server.
+- **Argo CD plugin:** Roadie's plugin shows each service's sync status, health and deploy history, using the `argocd/app-name` annotation services already have.
+  - It reaches Argo CD through Backstage's proxy, which only signed-in users can call.
+  - It uses a read-only Argo CD account, `backstage`, defined in `platform/bootstrap/argocd-values.yaml`.
+  - The Cluster workflow creates that account's token for each cluster through Argo CD's API, and stores it only as a Kubernetes secret.
+  - The proxy skips TLS verification, because Argo CD's own certificate is self-signed and the traffic stays inside the cluster.
 
