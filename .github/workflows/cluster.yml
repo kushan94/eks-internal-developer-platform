@@ -71,6 +71,8 @@ jobs:
         run: make tf-init TF_STATE_BUCKET="idp-tfstate-$(aws sts get-caller-identity --query Account --output text)" > /dev/null
       - name: Install Argo CD and External Secrets
         run: make platform-bootstrap
+      - name: Give Backstage a read-only Argo CD token
+        run: make argocd-backstage-token
       - name: Hand over to Argo CD
         run: make gitops REPO_URL="https://github.com/${{ github.repository }}.git" AWS_ENABLED=true
       - name: Apply the aws-platform settings

@@ -21,7 +21,8 @@ spec:
             repository: idp/backstage
             tag: {{ .Values.backstage.imageTag | quote }}
           args: ["--config", "app-config.yaml", "--config", "app-config.production.yaml"]
-          extraEnvVarsSecrets: [backstage-github-app, backstage-database]
+          # backstage-argocd is created by `make argocd-backstage-token`.
+          extraEnvVarsSecrets: [backstage-github-app, backstage-database, backstage-argocd]
           resources:
             requests: { cpu: 250m, memory: 512Mi }
             limits: { memory: 1Gi }

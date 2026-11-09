@@ -20,7 +20,7 @@ TF_IMAGE ?= hashicorp/terraform:latest
 TF_STATE_BUCKET ?= $(shell terraform -chdir=infra/bootstrap output -raw state_bucket 2>/dev/null)
 TF_RUN = docker run --rm -v $(CURDIR)/infra/terraform:/workspace -w /workspace $(TF_IMAGE)
 
-.PHONY: local-up local-down cluster argocd external-secrets platform-bootstrap wait-apps local-git gitops demo status backstage aws-environment test tf-validate tf-init bootstrap github-setup
+.PHONY: local-up local-down cluster argocd argocd-backstage-token external-secrets platform-bootstrap wait-apps local-git gitops demo status backstage aws-environment test tf-validate tf-init bootstrap github-setup
 
 local-up: cluster argocd local-git gitops ## Create the kind cluster and hand the platform to Argo CD
 
@@ -34,7 +34,11 @@ cluster:
 argocd:
 	helm repo add argo https://argoproj.github.io/argo-helm --force-update
 	helm upgrade --install argocd argo/argo-cd --version $(ARGOCD_CHART_VERSION) \
+		--values platform/bootstrap/argocd-values.yaml \
 		--namespace argocd --create-namespace --wait --kube-context $(KUBE_CONTEXT)
+
+argocd-backstage-token: ## Give Backstage a read-only Argo CD token for this cluster
+	KUBE_CONTEXT=$(KUBE_CONTEXT) scripts/argocd-backstage-token.sh
 
 external-secrets:
 	helm repo add external-secrets https://charts.external-secrets.io --force-update
