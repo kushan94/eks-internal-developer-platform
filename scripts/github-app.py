@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """Create the platform's GitHub Apps.
 
-  argocd  Lets Argo CD read repositories (Contents: read)
-  runner  Lets the VPC runner register itself with this repo (Administration: write)
+  argocd     Lets Argo CD read repositories (Contents: read)
+  runner     Lets the VPC runner register itself with this repo (Administration: write)
+  backstage  Signs users in to Backstage and opens its pull requests (Contents and
+             Pull requests: write)
 
 Uses GitHub's app manifest flow: this script defines the app, you click
 Create in the browser, and GitHub hands the app's ID and private key back to
 this script. Credentials are saved under ~/.config/eks-idp with owner-only
 permissions and are never printed.
 
-  scripts/github-app.py create [argocd|runner]   Create the app (opens your browser)
-  scripts/github-app.py secret [argocd|runner]   After installing the app, write the
-                                                 JSON for its Secrets Manager secret
+  scripts/github-app.py create [argocd|runner|backstage]   Create the app (opens your browser)
+  scripts/github-app.py secret [argocd|runner|backstage]   After installing the app, write
+                                                           the JSON for its Secrets Manager secret
 
 Only uses the Python standard library and the openssl command.
 """
@@ -49,6 +51,16 @@ PROFILES = {
         "file_stem": "github-runner-app",
         "secret_id": "idp/github/runner-app",
         "install_hint": "Install it ONLY on the platform repo, because it can administer the repos it's installed on",
+    },
+    "backstage": {
+        "name": "{owner}-idp-backstage",
+        "description": "Signs users in to the platform's Backstage portal and opens its pull requests.",
+        "permissions": {"contents": "write", "pull_requests": "write", "metadata": "read"},
+        "callback_urls": ["https://backstage.idp.skyforgelab.cloud/api/auth/github/handler/frame"],
+        "oauth": True,
+        "file_stem": "github-backstage-app",
+        "secret_id": "idp/backstage/github-app",
+        "install_hint": "Install it ONLY on the platform repo, where Backstage reads the catalog and opens pull requests",
     },
 }
 
@@ -98,6 +110,9 @@ def create(owner, repo_url):
         "hook_attributes": {"url": "https://example.com/unused", "active": False},
         "default_permissions": PROFILE["permissions"],
     }
+    if PROFILE.get("callback_urls"):
+        manifest["callback_urls"] = PROFILE["callback_urls"]
+        manifest["request_oauth_on_install"] = False
     form = f"""<!doctype html><html><body>
 <form id="f" method="post" action="https://github.com/settings/apps/new?state={state}">
 <input type="hidden" name="manifest" value='{json.dumps(manifest).replace("'", "&#39;")}'>
@@ -126,7 +141,13 @@ def create(owner, repo_url):
                     return
                 app = api("POST", f"/app-manifests/{query['code'][0]}/conversions")
                 write_private(KEY_FILE, app["pem"])
-                write_private(APP_FILE, json.dumps({"id": app["id"], "slug": app["slug"], "html_url": app["html_url"]}, indent=2))
+                details = {"id": app["id"], "slug": app["slug"], "html_url": app["html_url"]}
+                if PROFILE.get("oauth"):
+                    details["clientId"] = app["client_id"]
+                    details["clientSecret"] = app["client_secret"]
+                    # The webhook is inactive, but Backstage's config still expects a secret.
+                    details["webhookSecret"] = app.get("webhook_secret") or secrets.token_hex(32)
+                write_private(APP_FILE, json.dumps(details, indent=2))
                 result.update(app)
                 self.reply(f"<p>Created <b>{app['slug']}</b>. You can close this tab and return to the terminal.</p>")
 
@@ -169,11 +190,14 @@ def secret():
     if len(installations) > 1:
         print("More than one installation found; using the first:", ", ".join(i["account"]["login"] for i in installations))
     installation = installations[0]
-    write_private(SECRET_FILE, json.dumps({
+    value = {
         "appId": str(app["id"]),
         "installationId": str(installation["id"]),
         "privateKey": KEY_FILE.read_text(),
-    }))
+    }
+    if PROFILE.get("oauth"):
+        value.update({k: app[k] for k in ("clientId", "clientSecret", "webhookSecret")})
+    write_private(SECRET_FILE, json.dumps(value))
     print(f"Installed on {installation['account']['login']} ({installation['repository_selection']} repositories), installation ID {installation['id']}.")
     print(f"Secret value written to {SECRET_FILE}. Store it with:")
     print(f"  aws secretsmanager put-secret-value --secret-id {PROFILE['secret_id']} --secret-string file://{SECRET_FILE}")

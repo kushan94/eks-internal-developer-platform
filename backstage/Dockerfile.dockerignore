@@ -1,0 +1,10 @@
+# Used by the multi-stage Dockerfile, which needs the source; the host-build
+# Dockerfile in packages/backend uses .dockerignore instead.
+dist-types
+node_modules
+packages/*/dist
+packages/*/node_modules
+plugins/*/dist
+plugins/*/node_modules
+*.local.yaml
+.git

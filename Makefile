@@ -14,6 +14,8 @@ CROSSPLANE ?= crossplane
 export DOCKER_HOST ?= $(shell docker context inspect --format '{{.Endpoints.docker.Host}}' 2>/dev/null)
 # Installs the Crossplane AWS providers. Only works on EKS, where they get credentials from Pod Identity.
 AWS_ENABLED ?= false
+# Only needed on EKS, where Backstage pulls its image from ECR.
+AWS_ACCOUNT_ID ?= $(if $(filter true,$(AWS_ENABLED)),$(shell aws sts get-caller-identity --query Account --output text 2>/dev/null))
 TF_IMAGE ?= hashicorp/terraform:latest
 TF_STATE_BUCKET ?= $(shell terraform -chdir=infra/bootstrap output -raw state_bucket 2>/dev/null)
 TF_RUN = docker run --rm -v $(CURDIR)/infra/terraform:/workspace -w /workspace $(TF_IMAGE)
@@ -52,7 +54,7 @@ local-git: ## Serve this repo's commits to Argo CD over the kind network
 		echo "Git server did not start:"; docker logs $(GIT_CONTAINER); exit 1
 
 gitops: ## Apply the root application
-	sed -e 's|REPO_URL|$(REPO_URL)|' -e 's|AWS_ENABLED|$(AWS_ENABLED)|' gitops/root-app.yaml | $(KUBECTL) apply -f -
+	sed -e 's|REPO_URL|$(REPO_URL)|' -e 's|AWS_ENABLED|$(AWS_ENABLED)|' -e 's|AWS_ACCOUNT_ID|$(AWS_ACCOUNT_ID)|' gitops/root-app.yaml | $(KUBECTL) apply -f -
 
 demo: ## Wait for Argo CD to deliver the example WebService
 	for i in $$(seq 1 60); do $(KUBECTL) -n demo get webservice hello >/dev/null 2>&1 && break; sleep 5; done

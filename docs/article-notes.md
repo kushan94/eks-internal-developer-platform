@@ -105,3 +105,15 @@ Copy this for each session:
   - Argo CD flagged the redirect HTTPRoute as OutOfSync, because the API server added default fields. Writing those defaults in Git fixed it.
   - The load balancer controller puts `:443` in the redirect URL. It works, but isn't as clean as a plain `https://` URL.
 
+### 2026-11-09: Backstage in the cluster
+- **Goal:** Run Backstage on EKS with GitHub sign-in, RDS and no personal credentials.
+- **What happened:**
+  - The multi-stage image built in under 3 minutes with caching.
+  - Against a real Postgres 18, the backend was ready in 9 seconds and created 13 plugin databases.
+  - Guest sign-in is refused in production, and GitHub sign-in redirects correctly.
+- **What surprised me:**
+  - The Backstage chart passes `extraDeploy` through `tpl`, which silently turned every ExternalSecret placeholder into an empty string. Rendering the real chart caught it, and the fix was escaping them twice.
+  - Recent PostgreSQL versions on RDS require TLS, so the image now includes the RDS CA bundle, pinned by checksum.
+  - The ECR address includes the account ID, which shouldn't be in Git, so it's passed in when the root app is applied.
+  - BuildKit features in the Dockerfile need the buildx plugin, which Colima doesn't include.
+

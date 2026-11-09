@@ -19,6 +19,9 @@ out() { terraform -chdir=infra/bootstrap output -raw "$1"; }
 # Plans run for pull requests, so this environment has no branch restriction.
 gh api -X PUT "repos/$REPO/environments/aws-plan" --silent
 
+# The Backstage image workflow, which only runs on main.
+gh api -X PUT "repos/$REPO/environments/aws-build" --silent
+
 # Required reviewers and branch rules only work on public repos with GitHub Free.
 if [ "$(gh repo view "$REPO" --json visibility --jq .visibility)" = "PUBLIC" ]; then
   # Applies need your approval and can only run from main.
@@ -56,5 +59,7 @@ for env in aws-apply aws-destroy; do
   out github_apply_access_key_id | set_secret "$env" AWS_ACCESS_KEY_ID
   out github_apply_secret_access_key | set_secret "$env" AWS_SECRET_ACCESS_KEY
 done
+out github_image_push_access_key_id | set_secret aws-build AWS_ACCESS_KEY_ID
+out github_image_push_secret_access_key | set_secret aws-build AWS_SECRET_ACCESS_KEY
 
 echo "Environments and secrets are set for $REPO."

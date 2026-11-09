@@ -61,6 +61,21 @@ One-time DNS setup:
 ECS services stay reachable only inside the VPC for now.
 
 ## Developer portal
+In the cluster, Backstage runs at `https://backstage.idp.skyforgelab.cloud` with GitHub sign-in. See [ADR 0010](docs/adr/0010-backstage-in-cluster.md).
+
+One-time setup for the cluster:
+1. **Create the app:** run `scripts/github-app.py create backstage`, then install it **only on this repo**.
+2. **Prepare the secret:** run `scripts/github-app.py secret backstage`.
+3. **Store it:** run `make bootstrap`, then store the JSON:
+   ```sh
+   aws secretsmanager put-secret-value --secret-id idp/backstage/github-app \
+     --secret-string file://$HOME/.config/eks-idp/github-backstage-app-secret.json
+   ```
+4. **Set up CI:** run `make github-setup` to give the image workflow its ECR push key.
+5. **Build the first image:** run **Actions → Backstage image**. It commits the image tag, and Argo CD deploys Backstage on EKS from then on.
+
+To run it on your laptop instead:
+
 Backstage also needs Node.js 24 and Corepack (`corepack enable`), and a GitHub CLI login. Install its dependencies once, then start it:
 
 ```sh
@@ -96,7 +111,7 @@ colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
 - [x] **1. Local core:** Crossplane, Argo CD and the `WebService` API on kind
 - [x] **2. GitOps:** Argo CD deploys the platform and workloads from this repo
 - [x] **3. Backstage:** catalog, plus a template that opens a pull request, running locally
-- [ ] **3b. Backstage in the cluster:** container image, Postgres, GitHub token and sign-in
+- [ ] **3b. Backstage in the cluster:** container image, Postgres, GitHub sign-in *(built and tested locally)*
 - [ ] **4. AWS foundations:** account access, budget alerts, VPC and ECS cluster in Terraform *(planned and budget created, not applied)*
 - [ ] **5. EKS:** the same platform on a Terraform-built cluster, with Crossplane using Pod Identity
 - [ ] **6. ECS runtime:** run `runtime: ecs` services on Fargate, managed from EKS *(composition built and validated offline)*
@@ -212,6 +227,7 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0007: Give Argo CD repo access through a GitHub App](docs/adr/0007-argocd-repo-access.md)
 - [ADR 0008: Set up clusters from a GitHub runner inside the VPC](docs/adr/0008-vpc-runner.md)
 - [ADR 0009: Public URLs through Gateway API and a Route 53 subdomain](docs/adr/0009-public-urls.md)
+- [ADR 0010: Run Backstage in the cluster](docs/adr/0010-backstage-in-cluster.md)
 
 ## License
 [MIT](LICENSE)
