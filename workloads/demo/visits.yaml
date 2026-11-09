@@ -9,7 +9,7 @@ spec:
   public: true
   # Counts page views in Postgres. Built from apps/visits; the image
   # workflow sets the tag after each build.
-  image: ghcr.io/kushan94/idp-visits:2a59164ead6cdf7766e9cf5a5d4c29d0f8f2a5df
+  image: ghcr.io/kushan94/idp-visits:95bf623afe4692f5f980544357008aff9474006a
   port: 8080
   replicas: 2
   database:
