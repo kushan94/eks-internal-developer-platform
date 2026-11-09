@@ -153,3 +153,14 @@ Copy this for each session:
   - ECS can't read Kubernetes Secrets, so the managed class copies the password to Secrets Manager and holds back the task definition until its ARN exists. Rendering the composition with and without that observed state tested both paths.
   - EKS has no default StorageClass or EBS driver, so in-cluster databases would have stayed Pending on EKS while working fine on kind.
 
+### 2026-11-09: Databases on EKS
+- **What happened:** All three cases worked on the first EKS run.
+  - **Managed on Kubernetes:** the service's login wrote to its own database on RDS PostgreSQL 18.3, over TLS.
+  - **In-cluster:** CloudNativePG ran PostgreSQL 18.6 on a 1 GiB gp3 EBS volume.
+  - **Managed on ECS:** the task started with `PGPASSWORD` from Secrets Manager, and the stored copy matched the login's password.
+  - **Isolation:** one service's login was refused on another's database on RDS too.
+  - **Deletion:** removing the services deleted the ECS service and Secrets Manager secret within 20 seconds, and left no databases or logins on RDS.
+- **What surprised me:**
+  - Every `terraform plan` failed while a session was running, because refreshing a Secrets Manager secret version reads its value, and AWS's ReadOnlyAccess policy doesn't allow that. Earlier plans had only passed because nothing was deployed. The plan user can now read the two secrets Terraform writes, which it could already read in the state.
+  - My first password comparison said they differed. The AWS CLI's text output adds a newline, so I was hashing different strings. Another test that fails for the wrong reason.
+

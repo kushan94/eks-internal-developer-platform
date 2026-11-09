@@ -133,7 +133,7 @@ colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
 - [x] **4. AWS foundations:** account access, budget alerts, VPC and ECS cluster in Terraform, plus infrastructure and cluster pipelines
 - [x] **5. EKS:** the same platform on a Terraform-built cluster, with Crossplane using Pod Identity, and Argo CD reading private repos through a GitHub App
 - [x] **6. ECS runtime:** run `runtime: ecs` services on Fargate, managed from EKS
-- [x] **7. Databases:** managed (shared RDS) or in-cluster (CloudNativePG) PostgreSQL on `WebService` *(tested on kind; EKS next session)*
+- [x] **7. Databases:** managed (shared RDS) or in-cluster (CloudNativePG) PostgreSQL on `WebService`, for both runtimes
 - [x] **8. Traffic:** public HTTPS URLs with Gateway API on EKS, for the Kubernetes runtime
 - [ ] **8b. Traffic for ECS:** public URLs for the ECS runtime
 - [ ] **9. Guardrails:** Kyverno CEL policies, External Secrets Operator and image signing
