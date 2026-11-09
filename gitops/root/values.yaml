@@ -20,4 +20,4 @@ awsAccountId: ""
 backstage:
   # Written by the Backstage image workflow after each build. Empty until the
   # first build, which keeps Backstage out of the cluster until there's an image.
-  imageTag: "66997a84527ac20edeb492feb03101c789130ca9"
+  imageTag: "60937b24d1aface0c1a0ed4961cd91c16a0c1e77"
