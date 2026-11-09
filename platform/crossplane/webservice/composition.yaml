@@ -8,8 +8,8 @@ spec:
     kind: WebService
   mode: Pipeline
   pipeline:
-    # Shared platform settings, such as the public domain, and account-specific
-    # AWS settings, such as subnets and the ECS cluster.
+    # Shared platform settings, such as the public domain, account-specific
+    # AWS settings, such as subnets and the ECS cluster, and the shared Postgres server.
     - step: load-environment
       functionRef:
         name: function-environment-configs
@@ -24,6 +24,9 @@ spec:
             - type: Reference
               ref:
                 name: aws-platform
+            - type: Reference
+              ref:
+                name: managed-postgres
           policy:
             resolution: Optional
 
@@ -43,6 +46,29 @@ spec:
             {{- $env := default dict (index .context "apiextensions.crossplane.io/environment") }}
             {{- /* Lets Backstage's Kubernetes plugin find everything this WebService creates. */}}
             {{- $backstageId := printf "%s-%s" $ns $name }}
+            {{- $url := "" }}
+            {{- /* Database: the same PG* variables for both classes, so apps don't care which they get. */}}
+            {{- $dbClass := dig "database" "class" "" $xr.spec }}
+            {{- $dbSecret := "" }}
+            {{- $dbName := "" }}
+            {{- $dbHost := "" }}
+            {{- $pg := dig "managedPostgres" dict $env }}
+            {{- if eq $dbClass "in-cluster" }}
+            {{- if ne $runtime "kubernetes" }}{{ fail "in-cluster databases are only available for the kubernetes runtime; use class: managed on ECS" }}{{ end }}
+            {{- /* CloudNativePG creates the app database and writes its login to <cluster>-app. */}}
+            {{- $dbSecret = printf "%s-db-app" $name }}
+            {{- $dbName = "app" }}
+            {{- $dbHost = printf "%s-db-rw.%s.svc" $name $ns }}
+            {{- else if eq $dbClass "managed" }}
+            {{- range $key := list "providerConfigName" "host" "port" "adminRole" }}
+            {{- if not (hasKey $pg $key) }}{{ fail (printf "managed databases need managedPostgres.%s in the managed-postgres or aws-platform EnvironmentConfig" $key) }}{{ end }}
+            {{- end }}
+            {{- /* One database and login per service on the shared server, named after its namespace. */}}
+            {{- $dbName = $backstageId }}
+            {{- if gt (len $dbName) 63 }}{{ fail (printf "the database name %s is longer than Postgres' 63 characters; shorten the namespace or name" $dbName) }}{{ end }}
+            {{- $dbSecret = printf "%s-db" $name }}
+            {{- $dbHost = $pg.host }}
+            {{- end }}
             {{- if eq $runtime "kubernetes" }}
             {{- $available := dig "deployment" "resource" "status" "availableReplicas" 0 (default dict .observed.resources) }}
             apiVersion: apps/v1
@@ -70,6 +96,31 @@ spec:
                       image: {{ $xr.spec.image }}
                       ports:
                         - containerPort: {{ $xr.spec.port }}
+                      {{- if $dbClass }}
+                      env:
+                        {{- if eq $dbClass "in-cluster" }}
+                        - name: PGHOST
+                          valueFrom: {secretKeyRef: {name: {{ $dbSecret }}, key: host}}
+                        - name: PGPORT
+                          valueFrom: {secretKeyRef: {name: {{ $dbSecret }}, key: port}}
+                        {{- else }}
+                        - name: PGHOST
+                          value: {{ $pg.host | quote }}
+                        - name: PGPORT
+                          value: {{ $pg.port | toString | quote }}
+                        {{- end }}
+                        - name: PGDATABASE
+                          value: {{ $dbName | quote }}
+                        - name: PGUSER
+                          valueFrom: {secretKeyRef: {name: {{ $dbSecret }}, key: username}}
+                        - name: PGPASSWORD
+                          valueFrom: {secretKeyRef: {name: {{ $dbSecret }}, key: password}}
+                        - name: PGSSLMODE
+                          value: require
+                        # Generated passwords are letters and digits, so they need no URL encoding.
+                        - name: DATABASE_URL
+                          value: postgres://$(PGUSER):$(PGPASSWORD)@$(PGHOST):$(PGPORT)/$(PGDATABASE)?sslmode=require
+                      {{- end }}
             ---
             apiVersion: v1
             kind: Service
@@ -112,11 +163,7 @@ spec:
                 - backendRefs:
                     - name: {{ $name }}
                       port: 80
-            ---
-            apiVersion: platform.example.org/v1alpha1
-            kind: WebService
-            status:
-              url: https://{{ $host }}
+            {{- $url = printf "https://%s" $host }}
             {{- end }}
             {{- else if eq $runtime "ecs" }}
             {{- if $xr.spec.public }}{{ fail "public URLs are only available for the kubernetes runtime for now" }}{{ end }}
@@ -129,6 +176,19 @@ spec:
             {{- $container := dict "name" "app" "image" $xr.spec.image "essential" true
                   "portMappings" (list (dict "containerPort" $xr.spec.port "protocol" "tcp"))
                   "logConfiguration" (dict "logDriver" "awslogs" "options" (dict "awslogs-group" $logGroup "awslogs-region" $aws.region "awslogs-stream-prefix" "app")) }}
+            {{- /* The task definition waits for the database password to reach Secrets Manager. */}}
+            {{- $dbSecretArn := dig "db-secret" "resource" "status" "atProvider" "arn" "" (default dict .observed.resources) }}
+            {{- $dbPasswordStored := dig "db-secret-version" "resource" "status" "atProvider" "id" "" (default dict .observed.resources) }}
+            {{- $renderTask := or (ne $dbClass "managed") (and $dbSecretArn $dbPasswordStored) }}
+            {{- if eq $dbClass "managed" }}
+            {{- $_ := set $container "environment" (list
+                  (dict "name" "PGHOST" "value" $pg.host)
+                  (dict "name" "PGPORT" "value" ($pg.port | toString))
+                  (dict "name" "PGDATABASE" "value" $dbName)
+                  (dict "name" "PGUSER" "value" $dbName)
+                  (dict "name" "PGSSLMODE" "value" "require")) }}
+            {{- $_ := set $container "secrets" (list (dict "name" "PGPASSWORD" "valueFrom" $dbSecretArn)) }}
+            {{- end }}
             apiVersion: cloudwatchlogs.aws.m.upbound.io/v1beta1
             kind: Group
             metadata:
@@ -185,6 +245,7 @@ spec:
                   name: {{ $name }}
                 cidrIpv4: 0.0.0.0/0
                 ipProtocol: "-1"
+            {{- if $renderTask }}
             ---
             apiVersion: ecs.aws.m.upbound.io/v1beta1
             kind: TaskDefinition
@@ -227,6 +288,141 @@ spec:
                 deploymentCircuitBreaker:
                   enable: true
                   rollback: true
+            {{- end }}
+            {{- if eq $dbClass "managed" }}
+            ---
+            # ECS reads secrets from Secrets Manager, so the password is copied there.
+            apiVersion: secretsmanager.aws.m.upbound.io/v1beta1
+            kind: Secret
+            metadata:
+              name: {{ $name }}-db
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: db-secret
+            spec:
+              forProvider:
+                region: {{ $aws.region }}
+                name: {{ printf "idp/workloads/%s/%s/database" $ns $name }}
+                description: {{ printf "Database password for WebService %s/%s" $ns $name | quote }}
+                recoveryWindowInDays: 0
+            ---
+            apiVersion: secretsmanager.aws.m.upbound.io/v1beta1
+            kind: SecretVersion
+            metadata:
+              name: {{ $name }}-db
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: db-secret-version
+            spec:
+              forProvider:
+                region: {{ $aws.region }}
+                secretIdRef:
+                  name: {{ $name }}-db
+                secretStringSecretRef:
+                  name: {{ $dbSecret }}
+                  key: password
+            {{- end }}
+            {{- end }}
+            {{- if eq $dbClass "in-cluster" }}
+            {{- $readyInstances := dig "database" "resource" "status" "readyInstances" 0 (default dict .observed.resources) }}
+            ---
+            apiVersion: postgresql.cnpg.io/v1
+            kind: Cluster
+            metadata:
+              name: {{ $name }}-db
+              labels:
+                backstage.io/kubernetes-id: {{ $backstageId }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: database
+                gotemplating.fn.crossplane.io/ready: {{ if ge (int $readyInstances) 1 }}"True"{{ else }}"False"{{ end }}
+            spec:
+              instances: 1
+              # Shows the database pods on the service's Kubernetes tab in Backstage.
+              inheritedMetadata:
+                labels:
+                  backstage.io/kubernetes-id: {{ $backstageId }}
+              storage:
+                size: 1Gi
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  memory: 512Mi
+            {{- else if eq $dbClass "managed" }}
+            {{- $providerConfigRef := dict "kind" "ClusterProviderConfig" "name" $pg.providerConfigName }}
+            ---
+            # A login for the service. provider-sql generates its password and
+            # writes it, with the username, to the {{ $dbSecret }} Secret.
+            apiVersion: postgresql.sql.m.crossplane.io/v1alpha1
+            kind: Role
+            metadata:
+              name: {{ $name }}-db
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: db-role
+                crossplane.io/external-name: {{ $dbName }}
+            spec:
+              providerConfigRef: {{ $providerConfigRef | toJson }}
+              forProvider:
+                privileges:
+                  login: true
+              writeConnectionSecretToRef:
+                name: {{ $dbSecret }}
+            ---
+            # RDS's admin isn't a superuser, so it must be a member of the role
+            # to create a database owned by it.
+            apiVersion: postgresql.sql.m.crossplane.io/v1alpha1
+            kind: Grant
+            metadata:
+              name: {{ $name }}-db-admin
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: db-admin-membership
+            spec:
+              providerConfigRef: {{ $providerConfigRef | toJson }}
+              forProvider:
+                role: {{ $pg.adminRole }}
+                memberOf: {{ $dbName }}
+            ---
+            # Owned by the service's login, which can then create its own tables.
+            apiVersion: postgresql.sql.m.crossplane.io/v1alpha1
+            kind: Database
+            metadata:
+              name: {{ $name }}-db
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: db-database
+                crossplane.io/external-name: {{ $dbName }}
+            spec:
+              providerConfigRef: {{ $providerConfigRef | toJson }}
+              forProvider:
+                owner: {{ $dbName }}
+            ---
+            # Other services' logins can't connect to this database.
+            apiVersion: postgresql.sql.m.crossplane.io/v1alpha1
+            kind: Grant
+            metadata:
+              name: {{ $name }}-db-connect
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: db-connect
+            spec:
+              providerConfigRef: {{ $providerConfigRef | toJson }}
+              forProvider:
+                privileges: [CONNECT]
+                database: {{ $dbName }}
+                role: {{ $dbName }}
+                revokePublicOnDb: true
+            {{- end }}
+            {{- if or $url $dbClass }}
+            ---
+            apiVersion: platform.example.org/v1alpha1
+            kind: WebService
+            status:
+              {{- if $url }}
+              url: {{ $url }}
+              {{- end }}
+              {{- if $dbClass }}
+              database:
+                host: {{ $dbHost }}
+                name: {{ $dbName }}
+                secretName: {{ $dbSecret }}
+              {{- end }}
             {{- end }}
 
     # Marks AWS resources ready once they report Ready. Kubernetes resources set their readiness above.

@@ -1,0 +1,45 @@
+# Local clusters only: a CloudNativePG cluster stands in for the shared RDS
+# instance, so the managed database class works without AWS. It lives next
+# to provider-sql, which reaches it by its short service name.
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: shared-postgres
+spec:
+  instances: 1
+  # Writes the postgres login to shared-postgres-superuser for provider-sql.
+  enableSuperuserAccess: true
+  storage:
+    size: 1Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+---
+apiVersion: postgresql.sql.m.crossplane.io/v1alpha1
+kind: ClusterProviderConfig
+metadata:
+  name: shared-postgres
+spec:
+  credentials:
+    source: PostgreSQLConnectionSecret
+    connectionSecretRef:
+      name: shared-postgres-superuser
+      namespace: crossplane-system
+    secretKeyMapping:
+      endpoint: host
+  sslMode: require
+---
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: managed-postgres
+data:
+  managedPostgres:
+    providerConfigName: shared-postgres
+    # What services connect to, from their own namespaces.
+    host: shared-postgres-rw.crossplane-system.svc
+    port: 5432
+    adminRole: postgres

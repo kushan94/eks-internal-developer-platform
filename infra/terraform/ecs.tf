@@ -24,4 +24,19 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
+# Lets tasks read their database passwords, which Crossplane copies to Secrets Manager.
+resource "aws_iam_role_policy" "ecs_task_execution_secrets" {
+  name = "read-workload-secrets"
+  role = aws_iam_role.ecs_task_execution.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = "secretsmanager:GetSecretValue"
+      Resource = "arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:idp/workloads/*"
+    }]
+  })
+}
+
 data "aws_caller_identity" "current" {}

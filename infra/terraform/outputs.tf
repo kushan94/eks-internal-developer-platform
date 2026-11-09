@@ -14,15 +14,26 @@ output "aws_platform_environment" {
     apiVersion = "apiextensions.crossplane.io/v1beta1"
     kind       = "EnvironmentConfig"
     metadata   = { name = "aws-platform" }
-    data = {
-      aws = {
-        region               = var.region
-        ecsClusterName       = aws_ecs_cluster.this.name
-        vpcId                = module.vpc.vpc_id
-        vpcCidr              = module.vpc.vpc_cidr_block
-        subnetIds            = module.vpc.private_subnets
-        taskExecutionRoleArn = aws_iam_role.ecs_task_execution.arn
-      }
-    }
+    data = merge(
+      {
+        aws = {
+          region               = var.region
+          ecsClusterName       = aws_ecs_cluster.this.name
+          vpcId                = module.vpc.vpc_id
+          vpcCidr              = module.vpc.vpc_cidr_block
+          subnetIds            = module.vpc.private_subnets
+          taskExecutionRoleArn = aws_iam_role.ecs_task_execution.arn
+        }
+      },
+      # The shared Postgres server for managed databases, which comes with EKS.
+      var.enable_eks ? {
+        managedPostgres = {
+          providerConfigName = "shared-postgres"
+          host               = aws_db_instance.shared_postgres[0].address
+          port               = aws_db_instance.shared_postgres[0].port
+          adminRole          = aws_db_instance.shared_postgres[0].username
+        }
+      } : {},
+    )
   })
 }

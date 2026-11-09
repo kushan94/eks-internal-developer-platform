@@ -215,6 +215,10 @@ jobs:
       - name: Delete DNS records created from Kubernetes
         working-directory: .
         run: scripts/delete-external-dns-records.sh idp.skyforgelab.cloud idp
+      # Database passwords Crossplane copied to Secrets Manager for ECS services.
+      - name: Delete secrets created from Kubernetes
+        working-directory: .
+        run: scripts/delete-workload-secrets.sh idp
       - name: Destroy
         run: |
           if [ -z "$(terraform state list)" ]; then

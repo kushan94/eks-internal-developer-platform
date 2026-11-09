@@ -1,0 +1,31 @@
+# EKS: the shared RDS instance's admin login, which Terraform stores in
+# Secrets Manager. Its address and the admin role name reach the WebService
+# composition through the aws-platform EnvironmentConfig.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: shared-postgres-admin
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: aws-secrets-manager
+  target:
+    name: shared-postgres-admin
+  dataFrom:
+    - extract:
+        key: idp/platform/shared-postgres
+---
+apiVersion: postgresql.sql.m.crossplane.io/v1alpha1
+kind: ClusterProviderConfig
+metadata:
+  name: shared-postgres
+spec:
+  credentials:
+    source: PostgreSQLConnectionSecret
+    connectionSecretRef:
+      name: shared-postgres-admin
+      namespace: crossplane-system
+  # RDS's CA isn't in the provider's trust store, so the connection is
+  # encrypted without verifying the certificate.
+  sslMode: require

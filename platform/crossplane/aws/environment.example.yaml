@@ -14,3 +14,9 @@ data:
       - subnet-0123456789abcdef0
       - subnet-0fedcba9876543210
     taskExecutionRoleArn: arn:aws:iam::111122223333:role/idp-ecs-task-execution
+  # Only on EKS: the shared RDS instance for managed databases.
+  managedPostgres:
+    providerConfigName: shared-postgres
+    host: idp-shared-postgres.abcdefghijkl.eu-west-1.rds.amazonaws.com
+    port: 5432
+    adminRole: idpadmin

@@ -10,3 +10,7 @@ spec:
   port: ${{ values.port }}
   replicas: ${{ values.replicas }}
   public: ${{ values.public }}
+{%- if values.database != 'none' %}
+  database:
+    class: ${{ values.database }}
+{%- endif %}

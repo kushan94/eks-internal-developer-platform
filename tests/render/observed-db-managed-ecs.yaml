@@ -1,0 +1,21 @@
+apiVersion: secretsmanager.aws.m.upbound.io/v1beta1
+kind: Secret
+metadata:
+  name: orders-db
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: db-secret
+status:
+  atProvider:
+    arn: arn:aws:secretsmanager:eu-west-1:111122223333:secret:idp/workloads/team-a/orders/database-AbCdEf
+---
+apiVersion: secretsmanager.aws.m.upbound.io/v1beta1
+kind: SecretVersion
+metadata:
+  name: orders-db
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: db-secret-version
+status:
+  atProvider:
+    id: arn:aws:secretsmanager:eu-west-1:111122223333:secret:idp/workloads/team-a/orders/database-AbCdEf|v1

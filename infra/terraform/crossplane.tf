@@ -14,7 +14,7 @@ resource "aws_iam_role" "crossplane" {
 }
 
 # Only what the WebService ECS runtime creates: ECS services, task definitions,
-# security groups and log groups.
+# security groups, log groups, and database password secrets.
 resource "aws_iam_role_policy" "crossplane" {
   count = var.enable_eks ? 1 : 0
   name  = "webservice-ecs-runtime"
@@ -58,6 +58,17 @@ resource "aws_iam_role_policy" "crossplane" {
           "logs:TagLogGroup", "logs:UntagLogGroup",
         ]
         Resource = "*"
+      },
+      {
+        Sid    = "DatabasePasswords"
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:CreateSecret", "secretsmanager:DeleteSecret", "secretsmanager:DescribeSecret",
+          "secretsmanager:GetSecretValue", "secretsmanager:PutSecretValue", "secretsmanager:UpdateSecret",
+          "secretsmanager:UpdateSecretVersionStage", "secretsmanager:ListSecretVersionIds",
+          "secretsmanager:GetResourcePolicy", "secretsmanager:TagResource", "secretsmanager:UntagResource",
+        ]
+        Resource = "arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:idp/workloads/*"
       },
       {
         Sid      = "PassTaskExecutionRole"
