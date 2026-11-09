@@ -12,5 +12,8 @@ spec:
   image: ghcr.io/kushan94/idp-visits:95bf623afe4692f5f980544357008aff9474006a
   port: 8080
   replicas: 2
+  # Page views and database query time, on the service's Grafana dashboard.
+  metrics:
+    path: /metrics
   database:
     class: managed

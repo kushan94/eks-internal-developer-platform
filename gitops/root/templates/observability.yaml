@@ -1,0 +1,120 @@
+# Metrics for the platform and every service: metrics-server for kubectl top
+# and Backstage, Prometheus to collect metrics, and Grafana to show them.
+{{- $sync := dict "automated" (dict "prune" true "selfHeal" true) "syncOptions" (list "CreateNamespace=true" "ServerSideApply=true" "SkipDryRunOnMissingResource=true") "retry" (dict "limit" 20 "backoff" (dict "duration" "15s" "factor" 2 "maxDuration" "2m")) }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: metrics-server
+  namespace: argocd
+spec:
+  project: platform
+  source:
+    repoURL: https://kubernetes-sigs.github.io/metrics-server/
+    chart: metrics-server
+    targetRevision: 3.14.0
+    {{- if not .Values.aws.enabled }}
+    helm:
+      valuesObject:
+        # kind's kubelets use self-signed certificates.
+        args: [--kubelet-insecure-tls]
+    {{- end }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    {{- toYaml $sync | nindent 4 }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-prometheus-stack
+  namespace: argocd
+  annotations:
+    # The chart's CRDs are large and some fields are defaulted by the API server.
+    argocd.argoproj.io/compare-options: ServerSideDiff=true
+spec:
+  project: platform
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 92.14.1
+    helm:
+      valuesObject:
+        # No alert routing yet.
+        alertmanager:
+          enabled: false
+        prometheus:
+          prometheusSpec:
+            # Sessions are short and the cluster is rebuilt each time.
+            retention: 2d
+            resources:
+              requests: {cpu: 200m, memory: 512Mi}
+              limits: {memory: 1536Mi}
+            # Scrape monitors from every namespace, not just this chart's.
+            podMonitorSelectorNilUsesHelmValues: false
+            serviceMonitorSelectorNilUsesHelmValues: false
+            ruleSelectorNilUsesHelmValues: false
+        kube-state-metrics:
+          # Lets dashboards find a service's pods by its Backstage ID.
+          metricLabelsAllowlist:
+            - pods=[backstage.io/kubernetes-id]
+        grafana:
+          defaultDashboardsTimezone: utc
+          {{- if .Values.aws.enabled }}
+          # GitHub login. The OAuth app's client ID and secret come from
+          # Secrets Manager through External Secrets.
+          envFromSecret: grafana-github-oauth
+          grafana.ini:
+            server:
+              root_url: https://grafana.{{ .Values.domain }}
+            auth:
+              disable_login_form: true
+            auth.github:
+              enabled: true
+              allow_sign_up: true
+              scopes: read:user,user:email
+              # Only these GitHub users get in, as admins; everyone else is refused.
+              role_attribute_path: "contains([{{ range $i, $u := .Values.grafanaAdmins }}{{ if $i }}, {{ end }}'{{ $u }}'{{ end }}], login) && 'Admin' || ''"
+              role_attribute_strict: true
+          {{- end }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    {{- toYaml $sync | nindent 4 }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dashboards
+  namespace: argocd
+spec:
+  project: platform
+  source:
+    repoURL: {{ .Values.repoURL }}
+    targetRevision: {{ .Values.targetRevision }}
+    path: platform/observability/dashboards
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    {{- toYaml $sync | nindent 4 }}
+{{- if .Values.aws.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: grafana-access
+  namespace: argocd
+spec:
+  project: platform
+  source:
+    repoURL: {{ .Values.repoURL }}
+    targetRevision: {{ .Values.targetRevision }}
+    path: platform/observability/aws
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    {{- toYaml $sync | nindent 4 }}
+{{- end }}

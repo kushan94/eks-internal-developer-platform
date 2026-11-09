@@ -19,3 +19,7 @@ rules:
   - apiGroups: ["postgresql.cnpg.io"]
     resources: ["clusters"]
     verbs: ["*"]
+  # Services that serve Prometheus metrics get a PodMonitor.
+  - apiGroups: ["monitoring.coreos.com"]
+    resources: ["podmonitors"]
+    verbs: ["*"]

@@ -14,6 +14,10 @@ clusterName: idp
 region: eu-north-1
 domain: idp.skyforgelab.cloud
 
+# GitHub users who can sign in to Grafana on EKS, as admins.
+grafanaAdmins:
+  - kushan94
+
 # Set by `make gitops` on EKS, so the account ID stays out of Git.
 awsAccountId: ""
 

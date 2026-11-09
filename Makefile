@@ -110,6 +110,8 @@ test: ## Render the WebService composition for each runtime and database class, 
 		https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.6.0/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml
 	curl -fsSL -o .test/schemas/cnpg-clusters.yaml \
 		https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/v1.30.1/config/crd/bases/postgresql.cnpg.io_clusters.yaml
+	curl -fsSL -o .test/schemas/podmonitors.yaml \
+		https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.94.2/example/prometheus-operator-crd/monitoring.coreos.com_podmonitors.yaml
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/kubernetes.yaml
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/ecs.yaml
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/public.yaml

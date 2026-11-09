@@ -57,6 +57,20 @@ spec:
                     Numeric user ID to run the container as. Only needed when the
                     image names its user, such as USER app, instead of numbering it,
                     because Kubernetes can then not check that it isn't root.
+                metrics:
+                  type: object
+                  description: >-
+                    Prometheus metrics the container serves. When set, Prometheus
+                    scrapes them and they appear on the service's Grafana dashboard.
+                  properties:
+                    port:
+                      type: integer
+                      minimum: 1
+                      maximum: 65535
+                      description: Port that serves metrics. Defaults to the service's port.
+                    path:
+                      type: string
+                      default: /metrics
                 database:
                   type: object
                   description: >-

@@ -15,6 +15,22 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+)
+
+// Served at /metrics for Prometheus, which the WebService's metrics field turns on.
+var (
+	pageViews = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "visits_page_views_total",
+		Help: "Page views, by whether the database answered.",
+	}, []string{"result"})
+	queryDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "visits_database_query_duration_seconds",
+		Help:    "Time to record a visit and read the count.",
+		Buckets: prometheus.ExponentialBuckets(0.001, 2, 12),
+	})
 )
 
 var page = template.Must(template.New("page").Parse(`<!doctype html>
@@ -64,19 +80,24 @@ func main() {
 	http.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "ok")
 	})
+	http.Handle("GET /metrics", promhttp.Handler())
 	http.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		var i info
+		start := time.Now()
 		err := pool.QueryRow(r.Context(), `
 			WITH added AS (INSERT INTO visits DEFAULT VALUES RETURNING id)
 			SELECT (SELECT count(*) FROM visits) + 1, current_database(), current_user,
 			       coalesce(host(inet_server_addr()), 'local socket'), current_setting('server_version'),
 			       coalesce((SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()), false)
 			FROM added`).Scan(&i.Count, &i.Database, &i.User, &i.Server, &i.Version, &i.SSL)
+		queryDuration.Observe(time.Since(start).Seconds())
 		if err != nil {
+			pageViews.WithLabelValues("error").Inc()
 			log.Printf("query failed: %v", err)
 			http.Error(w, "database unavailable", http.StatusServiceUnavailable)
 			return
 		}
+		pageViews.WithLabelValues("ok").Inc()
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		page.Execute(w, i)
 	})

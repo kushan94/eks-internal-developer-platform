@@ -10,6 +10,10 @@ metadata:
     platform.example.org/runtime: ${{ values.runtime }}
     backstage.io/kubernetes-id: ${{ values.namespace }}-${{ values.name }}
     backstage.io/kubernetes-namespace: ${{ values.namespace }}
+  links:
+    - url: https://grafana.idp.skyforgelab.cloud/d/webservice/webservice?var-service=${{ values.namespace }}-${{ values.name }}
+      title: Dashboard
+      icon: dashboard
 spec:
   type: service
   lifecycle: experimental
