@@ -98,3 +98,15 @@ kubernetes:
     - group: gateway.networking.k8s.io
       apiVersion: v1
       plural: httproutes
+
+# Shows each service's Argo CD sync and health status. The token belongs to
+# Argo CD's read-only backstage account and is created for each cluster.
+proxy:
+  endpoints:
+    '/argocd/api':
+      # Argo CD's own self-signed certificate, inside the cluster.
+      target: https://argocd-server.argocd.svc/api/v1/
+      changeOrigin: true
+      secure: false
+      headers:
+        Cookie: ${ARGOCD_AUTH_TOKEN}

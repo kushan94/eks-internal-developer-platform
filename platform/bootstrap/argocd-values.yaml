@@ -1,0 +1,8 @@
+# Argo CD settings that `make argocd` installs with.
+configs:
+  cm:
+    # A read-only account that Backstage uses to show sync and health status.
+    accounts.backstage: apiKey
+  rbac:
+    policy.csv: |
+      g, backstage, role:readonly

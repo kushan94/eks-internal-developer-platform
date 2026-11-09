@@ -135,3 +135,9 @@ Copy this for each session:
   - The destroy cleanup deleted ExternalDNS's records, but ExternalDNS was still running and recreated them within a minute, the same race the load balancer controller had. It now loses its permissions first.
   - The Kubernetes plugin asks for ConfigMaps and metrics by default, which showed as errors with least-privilege RBAC and no metrics-server. `kubernetes.objectTypes` and `skipMetricsLookup` fixed both.
 
+### 2026-11-09: Argo CD in Backstage
+- **What happened:** A read-only Argo CD account gets a fresh token each session, which Backstage's proxy uses.
+  - On kind, the token could read applications, and Argo CD refused sync, delete and admin-token requests with `permission denied ... sub: backstage`.
+  - Through Backstage's proxy, signed-in requests returned the demo's sync and health, and anonymous requests got 401.
+- **What surprised me:** My first checks of sync and delete returned 415, not 403, because I'd left out the JSON content type. A test that fails for the wrong reason looks like a pass, so it's worth checking the error says what you expect.
+
