@@ -16,10 +16,13 @@ Services need public HTTPS URLs under `skyforgelab.cloud`. The domain is registe
   - The composition adds an HTTPRoute for `<name>-<namespace>.idp.skyforgelab.cloud` and writes the URL to `status.url`.
   - One label is used under the domain because a wildcard certificate covers only one level.
 - **Versions:** the controller and ExternalDNS are installed by Argo CD with pinned charts, and the controller's IAM policy is pinned to its version. The Gateway API CRDs come from the upstream repo at the version the controller supports, v1.6.0.
-- **Cleanup:** the controller creates the ALB outside Terraform, so the destroy job first deletes load balancers, target groups and security groups tagged with the cluster's name.
+- **Cleanup:** the controller creates the ALB outside Terraform. Before Terraform runs, the destroy job does three things:
+  1. Removes the controller's IAM policy, so a restarting controller can't recreate the ALB.
+  2. Deletes the load balancers, target groups and security groups tagged with the cluster's name.
+  3. Deletes the DNS records ExternalDNS owns, found through its TXT ownership records.
 
 ## Consequences
 - **ECS:** Gateway API only routes to Kubernetes, so ECS services stay reachable only inside the VPC. Giving them public URLs needs a separate path, such as a second load balancer managed by the composition.
 - **Cost:** the shared ALB costs money while the cluster runs, and the two hosted zones cost $0.50 a month each.
-- **Stale DNS:** a nightly destroy leaves ExternalDNS records pointing at a deleted ALB until the next session updates them, which it can because it owns them through its TXT records.
+- **Wildcard record:** the redirect route has no hostname of its own, so it inherits the HTTP listener's `*.idp.skyforgelab.cloud`, and ExternalDNS publishes a wildcard record for it. Any unknown name under the domain reaches the ALB and gets a 404, which is acceptable.
 - **Duplicated domain:** the domain is set in both the Gateway manifest and the `platform` EnvironmentConfig.

@@ -105,3 +105,9 @@ Copy this for each session:
   - Argo CD flagged the redirect HTTPRoute as OutOfSync, because the API server added default fields. Writing those defaults in Git fixed it.
   - The load balancer controller puts `:443` in the redirect URL. It works, but isn't as clean as a plain `https://` URL.
 
+### 2026-11-09: Destroy hardening
+- **What happened:** The first destroy after public URLs removed the ALB and destroyed 80 resources cleanly. Two gaps remained:
+  - A load balancer controller restarting mid-destroy could recreate the ALB and block deleting the VPC. The cleanup now removes its IAM policy first.
+  - ExternalDNS records outlived the ALB they pointed at, so the destroy now deletes them, using ExternalDNS's own TXT ownership records to pick only its records.
+- **What surprised me:** GitHub ran the nightly destroy about 3 hours late. Scheduled workflows aren't punctual, so they're a safety net, not a timer.
+

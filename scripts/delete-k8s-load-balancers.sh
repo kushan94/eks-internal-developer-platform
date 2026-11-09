@@ -6,6 +6,17 @@ set -euo pipefail
 
 CLUSTER="${1:?usage: $0 <cluster name>}"
 
+# Stop the controller first. If its pod restarts while the cluster is being
+# destroyed, it would otherwise recreate the load balancer and block deleting
+# the VPC. Terraform tolerates the policy being gone when it destroys the role.
+controller_role="$CLUSTER-aws-load-balancer-controller"
+if aws iam get-role-policy --role-name "$controller_role" --policy-name aws-load-balancer-controller > /dev/null 2>&1; then
+  echo "Removing the load balancer controller's AWS permissions"
+  aws iam delete-role-policy --role-name "$controller_role" --policy-name aws-load-balancer-controller
+  # IAM changes take a few seconds to apply everywhere.
+  sleep 15
+fi
+
 tagged() {
   aws resourcegroupstaggingapi get-resources \
     --tag-filters "Key=elbv2.k8s.aws/cluster,Values=$CLUSTER" \
