@@ -55,7 +55,9 @@ PROFILES = {
     "backstage": {
         "name": "{owner}-idp-backstage",
         "description": "Signs users in to the platform's Backstage portal and opens its pull requests.",
-        "permissions": {"contents": "write", "pull_requests": "write", "metadata": "read"},
+        # Commit statuses: read lets Backstage resolve a branch's latest commit
+        # when it reads catalog files with a glob, such as catalog/**/*.yaml.
+        "permissions": {"contents": "write", "pull_requests": "write", "statuses": "read", "metadata": "read"},
         "callback_urls": ["https://backstage.idp.skyforgelab.cloud/api/auth/github/handler/frame"],
         "oauth": True,
         "file_stem": "github-backstage-app",
