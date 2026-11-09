@@ -1,8 +1,9 @@
 name: Visits image
 
 # Builds the visits demo app on every change to apps/visits/ on main, pushes
-# it to GitHub's container registry, then records the new tag in Git so Argo
-# CD deploys it. Built for amd64 (EKS) and arm64 (kind on Apple silicon).
+# it to GitHub's container registry, signs it, then records the new tag in Git
+# so Argo CD deploys it. Built for amd64 (EKS) and arm64 (kind on Apple silicon).
+# The cluster only runs ghcr.io/kushan94 images signed by this repo's workflows.
 
 on:
   push:
@@ -15,6 +16,9 @@ on:
 permissions:
   contents: write
   packages: write
+  # Keyless signing: cosign proves the image came from this workflow with its
+  # GitHub OIDC token, so there's no signing key to store.
+  id-token: write
 
 concurrency:
   group: visits-image
@@ -35,7 +39,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
       - name: Build and push
+        id: build
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: apps/visits
@@ -47,6 +53,11 @@ jobs:
             org.opencontainers.image.description=The platform's database demo app
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      # Signs the digest, which covers both architectures, not the tag.
+      - name: Sign
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"
       - name: Deploy the new image through Git
         run: |
           sed -i -E "s|^  image: ${IMAGE}:.*|  image: ${IMAGE}:${GITHUB_SHA}|" workloads/demo/visits.yaml

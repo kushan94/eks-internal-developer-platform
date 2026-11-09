@@ -1,0 +1,46 @@
+# Kyverno and the policies it enforces in workload namespaces. Pod Security
+# Admission, which Kubernetes includes, is turned on by the workloads
+# ApplicationSet's namespace labels.
+{{- $sync := dict "automated" (dict "prune" true "selfHeal" true) "syncOptions" (list "CreateNamespace=true" "ServerSideApply=true" "SkipDryRunOnMissingResource=true") "retry" (dict "limit" 20 "backoff" (dict "duration" "15s" "factor" 2 "maxDuration" "2m")) }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kyverno
+  namespace: argocd
+  annotations:
+    # The chart renders some CRDs with an empty labels map, which the API server
+    # drops. Comparing with the API server's own result avoids a permanent diff.
+    argocd.argoproj.io/compare-options: ServerSideDiff=true
+spec:
+  project: platform
+  source:
+    repoURL: https://kyverno.github.io/kyverno/
+    chart: kyverno
+    targetRevision: 3.9.2
+    helm:
+      valuesObject:
+        admissionController:
+          replicas: 1
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kyverno
+  syncPolicy:
+    {{- toYaml $sync | nindent 4 }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: policies
+  namespace: argocd
+spec:
+  project: platform
+  source:
+    repoURL: {{ .Values.repoURL }}
+    targetRevision: {{ .Values.targetRevision }}
+    path: platform/policies
+  destination:
+    server: https://kubernetes.default.svc
+    # The policies aren't namespaced; this only satisfies the project's destinations.
+    namespace: kyverno
+  syncPolicy:
+    {{- toYaml $sync | nindent 4 }}

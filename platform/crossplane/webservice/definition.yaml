@@ -50,6 +50,13 @@ spec:
                   type: boolean
                   default: false
                   description: Give the service a public HTTPS URL. Kubernetes runtime only, for now.
+                runAsUser:
+                  type: integer
+                  minimum: 1
+                  description: >-
+                    Numeric user ID to run the container as. Only needed when the
+                    image names its user, such as USER app, instead of numbering it,
+                    because Kubernetes can then not check that it isn't root.
                 database:
                   type: object
                   description: >-

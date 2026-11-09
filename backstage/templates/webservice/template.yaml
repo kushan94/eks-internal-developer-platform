@@ -65,7 +65,9 @@ spec:
         image:
           title: Container image
           type: string
-          description: For example, nginxinc/nginx-unprivileged:1.29-alpine
+          description: >-
+            With a version tag, from ghcr.io/kushan94, ghcr.io/stefanprodan or
+            docker.io/nginxinc. For example, nginxinc/nginx-unprivileged:1.29-alpine
           pattern: '^\S+$'
         port:
           title: Container port

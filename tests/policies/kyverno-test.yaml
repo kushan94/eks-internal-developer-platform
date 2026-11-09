@@ -1,0 +1,30 @@
+# `kyverno test tests/policies`: each policy passes the good pod and fails
+# only the pods that break its rule.
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: workload-images
+policies:
+  - ../../platform/policies/workload-images.yaml
+resources:
+  - pods.yaml
+variables: values.yaml
+results:
+  - policy: disallow-latest-tag
+    resources: [bad-latest, bad-no-tag]
+    result: fail
+  - policy: disallow-latest-tag
+    resources: [good, bad-registry, bad-resources]
+    result: pass
+  - policy: allowed-registries
+    resources: [bad-registry]
+    result: fail
+  - policy: allowed-registries
+    resources: [good, bad-latest, bad-no-tag, bad-resources]
+    result: pass
+  - policy: require-resources
+    resources: [bad-resources]
+    result: fail
+  - policy: require-resources
+    resources: [good, bad-latest, bad-no-tag, bad-registry]
+    result: pass

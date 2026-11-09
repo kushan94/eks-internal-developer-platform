@@ -1,0 +1,47 @@
+# The platform's own images (ghcr.io/kushan94/...) must be signed by one of
+# this repo's GitHub Actions workflows on main. Signing is keyless: the
+# workflow's GitHub identity is recorded in Sigstore's public transparency
+# log, so there are no signing keys to store or rotate.
+apiVersion: policies.kyverno.io/v1
+kind: ImageValidatingPolicy
+metadata:
+  name: verify-platform-images
+spec:
+  validationActions: [Deny]
+  webhookConfiguration:
+    timeoutSeconds: 30
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        platform.example.org/workload: "true"
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: [v1]
+        operations: [CREATE, UPDATE]
+        resources: [pods]
+  autogen:
+    podControllers:
+      controllers: [deployments]
+  matchImageReferences:
+    - glob: ghcr.io/kushan94/*
+  validationConfigurations:
+    # Tags stay as written, so Crossplane and Argo CD don't see drift.
+    mutateDigest: false
+    verifyDigest: false
+    required: true
+  attestors:
+    - name: platformCI
+      cosign:
+        keyless:
+          identities:
+            - issuer: https://token.actions.githubusercontent.com
+              subjectRegExp: '^https://github\.com/kushan94/eks-internal-developer-platform/\.github/workflows/[^/]+\.yml@refs/heads/main$'
+        ctlog:
+          url: https://rekor.sigstore.dev
+  validations:
+    - expression: >-
+        images.containers.filter(i, i.startsWith('ghcr.io/kushan94/'))
+          .all(i, verifyImageSignatures(i, [attestors.platformCI]) > 0)
+      message: >-
+        ghcr.io/kushan94 images must be signed by a GitHub Actions workflow in
+        kushan94/eks-internal-developer-platform on main

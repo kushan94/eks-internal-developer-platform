@@ -91,11 +91,29 @@ spec:
                     app.kubernetes.io/name: {{ $name }}
                     backstage.io/kubernetes-id: {{ $backstageId }}
                 spec:
+                  # Meets the restricted Pod Security Standard that workload namespaces enforce.
+                  securityContext:
+                    runAsNonRoot: true
+                    {{- with $xr.spec.runAsUser }}
+                    runAsUser: {{ . }}
+                    {{- end }}
+                    seccompProfile:
+                      type: RuntimeDefault
                   containers:
                     - name: app
                       image: {{ $xr.spec.image }}
                       ports:
                         - containerPort: {{ $xr.spec.port }}
+                      securityContext:
+                        allowPrivilegeEscalation: false
+                        capabilities:
+                          drop: [ALL]
+                      resources:
+                        requests:
+                          cpu: 50m
+                          memory: 64Mi
+                        limits:
+                          memory: 256Mi
                       {{- if $dbClass }}
                       env:
                         {{- if eq $dbClass "in-cluster" }}
