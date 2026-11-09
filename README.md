@@ -82,6 +82,19 @@ One-time DNS setup:
 
 ECS services stay reachable only inside the VPC for now.
 
+## Guardrails
+Team namespaces, which Argo CD creates from `workloads/` and `apps/`, enforce:
+
+| Rule | Enforced by |
+|---|---|
+| Restricted Pod Security: no root, no privilege escalation, capabilities dropped | Kubernetes Pod Security Admission |
+| Images have a version tag or digest, never `:latest` | Kyverno `disallow-latest-tag` |
+| Images come from `ghcr.io/kushan94`, `ghcr.io/stefanprodan`, `ghcr.io/cloudnative-pg` or `docker.io/nginxinc` | Kyverno `allowed-registries` |
+| Containers set CPU and memory requests and a memory limit | Kyverno `require-resources` |
+| `ghcr.io/kushan94` images are signed by this repo's workflows on main (cosign keyless) | Kyverno `verify-platform-images` |
+
+WebServices meet these by default. If an image names its user (such as `USER app`) instead of numbering it, set `runAsUser`. When a rule rejects a service, `kubectl get webservice` shows `SYNCED=False` and the condition says which rule and why. `make test` checks the policies against sample pods. See [ADR 0012](docs/adr/0012-guardrails.md).
+
 ## Developer portal
 In the cluster, Backstage runs at `https://backstage.idp.skyforgelab.cloud` with GitHub sign-in. See [ADR 0010](docs/adr/0010-backstage-in-cluster.md).
 
@@ -140,7 +153,7 @@ colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
 - [x] **7. Databases:** managed (shared RDS) or in-cluster (CloudNativePG) PostgreSQL on `WebService`, for both runtimes
 - [x] **8. Traffic:** public HTTPS URLs with Gateway API on EKS, for the Kubernetes runtime
 - [ ] **8b. Traffic for ECS:** public URLs for the ECS runtime
-- [ ] **9. Guardrails:** Kyverno CEL policies, External Secrets Operator and image signing
+- [x] **9. Guardrails:** Pod Security Admission, Kyverno CEL policies and keyless image signing
 - [ ] **10. Observability, cost and scaling:** OpenTelemetry, Prometheus, Grafana, OpenCost, Karpenter and KEDA
 - [ ] **11. Article:** publish the write-up
 
@@ -236,7 +249,8 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 | Crossplane CLI | 2.5.0 |
 | AWS Load Balancer Controller | 3.6.2 |
 | Gateway API | 1.7.0 |
-| Kyverno | 1.19.2 |
+| Kyverno | 1.19.2 (chart 3.9.2) |
+| cosign | 3.1.4 |
 | External Secrets Operator chart | 2.14.0 |
 | provider-sql | 0.16.2 |
 | CloudNativePG chart | 0.29.1 (operator 1.30.1) |
@@ -254,6 +268,7 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0009: Public URLs through Gateway API and a Route 53 subdomain](docs/adr/0009-public-urls.md)
 - [ADR 0010: Run Backstage in the cluster](docs/adr/0010-backstage-in-cluster.md)
 - [ADR 0011: Databases for WebServices, managed or in-cluster](docs/adr/0011-databases.md)
+- [ADR 0012: Guardrails with Pod Security Admission, Kyverno and signed images](docs/adr/0012-guardrails.md)
 
 ## License
 [MIT](LICENSE)

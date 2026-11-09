@@ -173,3 +173,15 @@ Copy this for each session:
   - Meanwhile, the golden path worked end to end on EKS: a service created in Backstage with a managed database became a pull request from the app's bot, and once it was merged, Argo CD and Crossplane gave it its own database on RDS.
 - **What surprised me:** The test script's first run failed three checks that had actually passed. Postgres prints a boolean as `true` when it's joined into text but as `t` on its own, and macOS `paste` needs `-` to read stdin. The checks were right; the assertions weren't.
 
+### 2026-11-09: Guardrails
+- **Goal:** Stop unsafe workloads before they run, with messages a developer can act on, while the golden path passes without effort.
+- **What happened:**
+  - Team namespaces get the `restricted` Pod Security profile and three Kyverno CEL policies through labels Argo CD sets when it creates them.
+  - On kind, `:latest`, no tag and a Docker Hub image outside the allowed list were all refused. Each `WebService` showed the reason in its `Synced` condition, and a compliant service became Ready next to them.
+  - Signature checking worked both ways with a real keyless-signed image: podinfo was admitted with its own workflows as the identity and refused with this repo's.
+  - `make test` now runs `kyverno test` against sample pods, and flipping one expectation makes it fail.
+- **What surprised me:**
+  - podinfo's image says `USER app`. Kubernetes can't prove a named user isn't root, so `runAsNonRoot` refuses to start it. The API gained an optional `runAsUser`.
+  - The visits image was rejected before Kyverno even looked for a signature: its GHCR package is private, and Kyverno reads anonymously.
+  - Kyverno's chart renders some CRDs with `labels: {}`. The API server drops empty maps, so Argo CD's default comparison showed the app as out of sync forever. Server-side diff fixed it; `ignoreDifferences` didn't.
+

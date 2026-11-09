@@ -1,0 +1,55 @@
+# Pods in a workload namespace, for `kyverno apply`. Good ones follow every rule;
+# each bad one breaks exactly one.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: good
+  namespace: team-a
+spec:
+  containers:
+    - name: app
+      image: nginxinc/nginx-unprivileged:1.29-alpine
+      resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {memory: 256Mi}}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-latest
+  namespace: team-a
+spec:
+  containers:
+    - name: app
+      image: nginxinc/nginx-unprivileged:latest
+      resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {memory: 256Mi}}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-no-tag
+  namespace: team-a
+spec:
+  containers:
+    - name: app
+      image: nginxinc/nginx-unprivileged
+      resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {memory: 256Mi}}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-registry
+  namespace: team-a
+spec:
+  containers:
+    - name: app
+      image: nginx:1.29-alpine
+      resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {memory: 256Mi}}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-resources
+  namespace: team-a
+spec:
+  containers:
+    - name: app
+      image: nginxinc/nginx-unprivileged:1.29-alpine

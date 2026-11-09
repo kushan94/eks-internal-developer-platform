@@ -9,5 +9,7 @@ spec:
   public: true
   # podinfo is a small demo app whose page shows which pod answered.
   image: ghcr.io/stefanprodan/podinfo:6.17.0
+  # podinfo's image names its user (app) instead of numbering it.
+  runAsUser: 100
   port: 9898
   replicas: 2

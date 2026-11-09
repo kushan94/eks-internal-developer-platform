@@ -18,6 +18,7 @@ AWS_ENABLED ?= false
 AWS_ACCOUNT_ID ?= $(if $(filter true,$(AWS_ENABLED)),$(shell aws sts get-caller-identity --query Account --output text 2>/dev/null))
 TF_IMAGE ?= hashicorp/terraform:latest
 TF_STATE_BUCKET ?= $(shell terraform -chdir=infra/bootstrap output -raw state_bucket 2>/dev/null)
+KYVERNO_CLI_IMAGE ?= ghcr.io/kyverno/kyverno-cli:v1.19.2
 TF_RUN = docker run --rm -v $(CURDIR)/infra/terraform:/workspace -w /workspace $(TF_IMAGE)
 
 .PHONY: local-up local-down cluster argocd argocd-backstage-token external-secrets platform-bootstrap wait-apps local-git gitops demo status backstage aws-environment test tf-validate tf-init bootstrap github-setup
@@ -84,7 +85,7 @@ aws-environment: ## Apply the aws-platform EnvironmentConfig from Terraform outp
 	$(KUBECTL) wait crd environmentconfigs.apiextensions.crossplane.io --for=condition=Established --timeout=60s
 	terraform -chdir=infra/terraform output -raw aws_platform_environment | $(KUBECTL) apply -f -
 
-test: ## Render the WebService composition for both runtimes and each database class, and validate it against the provider schemas
+test: ## Render the WebService composition for each runtime and database class, validate it, and test the Kyverno policies
 	@rm -rf .test && mkdir -p .test/schemas
 	cp platform/crossplane/aws/providers.yaml platform/crossplane/webservice/definition.yaml .test/schemas/
 	$(CROSSPLANE) render --include-full-xr tests/render/xr-kubernetes.yaml \
@@ -115,6 +116,7 @@ test: ## Render the WebService composition for both runtimes and each database c
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/db-in-cluster.yaml
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/db-managed.yaml
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/db-managed-ecs.yaml
+	docker run --rm -v $(CURDIR):/repo -w /repo $(KYVERNO_CLI_IMAGE) test tests/policies
 
 test-db: ## On a running cluster: create both database classes, log in, check isolation and cleanup
 	scripts/test-databases.sh $(KUBE_CONTEXT)
