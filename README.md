@@ -50,6 +50,24 @@ The `aws-platform` EnvironmentConfig holds account-specific values, such as subn
 
 Run `make test` to render the composition for both runtimes and validate the output against the AWS provider schemas. It needs Docker and the [Crossplane CLI](https://docs.crossplane.io/latest/cli/), but not AWS.
 
+## Databases
+Add `database` to a WebService to get a PostgreSQL database. Pick a class, much like a runtime:
+
+```yaml
+spec:
+  image: ghcr.io/example/orders:1.0.0
+  database:
+    class: managed   # or in-cluster
+```
+
+| | managed | in-cluster |
+|---|---|---|
+| **What you get** | A database and login on the shared Postgres server (RDS on EKS) | Your own CloudNativePG Postgres cluster in your namespace |
+| **Runtimes** | Kubernetes and ECS | Kubernetes only |
+| **Created by** | Crossplane's provider-sql | The CloudNativePG operator |
+
+The container gets `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD` and `PGSSLMODE`, and on Kubernetes also `DATABASE_URL`, so the app doesn't need to know which class it has. `kubectl get webservice` shows the class, and `status.database` names the host, database and Secret. Deleting the WebService deletes its database. See [ADR 0011](docs/adr/0011-databases.md).
+
 ## Public URLs
 On EKS, add `public: true` to a Kubernetes-runtime WebService to serve it at `https://<name>-<namespace>.idp.skyforgelab.cloud`. Its URL appears in `kubectl get webservice` and in `status.url`. One shared ALB, created from a Gateway API Gateway, serves every public service, and ExternalDNS publishes the hostnames. See [ADR 0009](docs/adr/0009-public-urls.md).
 
@@ -115,7 +133,7 @@ colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
 - [x] **4. AWS foundations:** account access, budget alerts, VPC and ECS cluster in Terraform, plus infrastructure and cluster pipelines
 - [x] **5. EKS:** the same platform on a Terraform-built cluster, with Crossplane using Pod Identity, and Argo CD reading private repos through a GitHub App
 - [x] **6. ECS runtime:** run `runtime: ecs` services on Fargate, managed from EKS
-- [ ] **7. AWS resources:** add a database to `WebService` for both runtimes
+- [x] **7. Databases:** managed (shared RDS) or in-cluster (CloudNativePG) PostgreSQL on `WebService` *(tested on kind; EKS next session)*
 - [x] **8. Traffic:** public HTTPS URLs with Gateway API on EKS, for the Kubernetes runtime
 - [ ] **8b. Traffic for ECS:** public URLs for the ECS runtime
 - [ ] **9. Guardrails:** Kyverno CEL policies, External Secrets Operator and image signing
@@ -209,13 +227,15 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 | EKS Kubernetes | 1.36 |
 | terraform-aws-eks / terraform-aws-vpc | 21.29 / 6.7 |
 | Backstage | 1.56.0 (1.56.3 is available) |
-| provider-upjet-aws (ECS, EC2, CloudWatch Logs) | 2.9.0 |
+| provider-upjet-aws (ECS, EC2, CloudWatch Logs, Secrets Manager) | 2.9.0 |
 | function-environment-configs / function-auto-ready | 0.9.2 / 0.7.3 |
 | Crossplane CLI | 2.5.0 |
 | AWS Load Balancer Controller | 3.6.2 |
 | Gateway API | 1.7.0 |
 | Kyverno | 1.19.2 |
 | External Secrets Operator chart | 2.14.0 |
+| provider-sql | 0.16.2 |
+| CloudNativePG chart | 0.29.1 (operator 1.30.1) |
 | Karpenter | 1.15.1 |
 
 ## Decisions
@@ -229,6 +249,7 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0008: Set up clusters from a GitHub runner inside the VPC](docs/adr/0008-vpc-runner.md)
 - [ADR 0009: Public URLs through Gateway API and a Route 53 subdomain](docs/adr/0009-public-urls.md)
 - [ADR 0010: Run Backstage in the cluster](docs/adr/0010-backstage-in-cluster.md)
+- [ADR 0011: Databases for WebServices, managed or in-cluster](docs/adr/0011-databases.md)
 
 ## License
 [MIT](LICENSE)

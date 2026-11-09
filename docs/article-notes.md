@@ -141,3 +141,15 @@ Copy this for each session:
   - Through Backstage's proxy, signed-in requests returned the demo's sync and health, and anonymous requests got 401.
 - **What surprised me:** My first checks of sync and delete returned 415, not 403, because I'd left out the JSON content type. A test that fails for the wrong reason looks like a pass, so it's worth checking the error says what you expect.
 
+### 2026-11-09: Databases on request
+- **Goal:** Developers get a Postgres database by adding one field to their `WebService`, and pick managed (shared RDS) or in-cluster (CloudNativePG), the way they pick a runtime.
+- **What happened:**
+  - On kind, a CloudNativePG cluster stood in for RDS, so the managed class could be tested without AWS.
+  - Both classes became Ready in about 90 seconds. A pod with the service's exact environment created a table, wrote and read it over TLS on both.
+  - A second service's login was refused on the first one's database with `User does not have CONNECT privilege`.
+  - Deleting the services dropped their databases and logins within 10 seconds.
+- **What surprised me:**
+  - On RDS the admin isn't a superuser, and since Postgres 16 it can't create a database owned by another role unless it's a member of that role. The composition grants that membership, and Crossplane retries until it exists.
+  - ECS can't read Kubernetes Secrets, so the managed class copies the password to Secrets Manager and holds back the task definition until its ARN exists. Rendering the composition with and without that observed state tested both paths.
+  - EKS has no default StorageClass or EBS driver, so in-cluster databases would have stayed Pending on EKS while working fine on kind.
+
