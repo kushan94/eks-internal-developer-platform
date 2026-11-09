@@ -211,6 +211,10 @@ jobs:
       - name: Delete load balancers created from Kubernetes
         working-directory: .
         run: scripts/delete-k8s-load-balancers.sh idp
+      # Records ExternalDNS created would otherwise point at the deleted load balancer.
+      - name: Delete DNS records created from Kubernetes
+        working-directory: .
+        run: scripts/delete-external-dns-records.sh idp.skyforgelab.cloud idp
       - name: Destroy
         run: |
           if [ -z "$(terraform state list)" ]; then

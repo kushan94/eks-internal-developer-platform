@@ -112,11 +112,12 @@ colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
 - [x] **2. GitOps:** Argo CD deploys the platform and workloads from this repo
 - [x] **3. Backstage:** catalog, plus a template that opens a pull request, running locally
 - [ ] **3b. Backstage in the cluster:** container image, Postgres, GitHub sign-in *(built and tested locally)*
-- [ ] **4. AWS foundations:** account access, budget alerts, VPC and ECS cluster in Terraform *(planned and budget created, not applied)*
-- [ ] **5. EKS:** the same platform on a Terraform-built cluster, with Crossplane using Pod Identity
-- [ ] **6. ECS runtime:** run `runtime: ecs` services on Fargate, managed from EKS *(composition built and validated offline)*
+- [x] **4. AWS foundations:** account access, budget alerts, VPC and ECS cluster in Terraform, plus infrastructure and cluster pipelines
+- [x] **5. EKS:** the same platform on a Terraform-built cluster, with Crossplane using Pod Identity, and Argo CD reading private repos through a GitHub App
+- [x] **6. ECS runtime:** run `runtime: ecs` services on Fargate, managed from EKS
 - [ ] **7. AWS resources:** add a database to `WebService` for both runtimes
-- [ ] **8. Traffic:** public URLs with Gateway API on EKS *(Kubernetes runtime built; ECS later)*
+- [x] **8. Traffic:** public HTTPS URLs with Gateway API on EKS, for the Kubernetes runtime
+- [ ] **8b. Traffic for ECS:** public URLs for the ECS runtime
 - [ ] **9. Guardrails:** Kyverno CEL policies, External Secrets Operator and image signing
 - [ ] **10. Observability, cost and scaling:** OpenTelemetry, Prometheus, Grafana, OpenCost, Karpenter and KEDA
 - [ ] **11. Article:** publish the write-up
@@ -165,9 +166,9 @@ One-time setup for the runner's GitHub App:
 | **Run workflow** with `plan` | `plan` |
 | **Run workflow** with `apply` | `plan`, then `apply` after you approve it |
 | **Run workflow** with `destroy` | `destroy` after you approve it |
-| Every night at 22:00 UTC | `destroy`, without approval |
+| Every night at 22:00 UTC | `destroy`, without approval. GitHub often starts scheduled runs late, by up to about 3 hours, so destroy manually when you finish. |
 
-Tick **enable_eks** when running the workflow to include the EKS cluster. Logs show only resource addresses and actions, because this repo's logs are public. See [ADR 0006](docs/adr/0006-infrastructure-pipeline.md).
+Tick **enable_eks** when running the workflow to include the EKS cluster. Before Terraform runs, every destroy deletes the load balancers and DNS records that Kubernetes created, and first removes the load balancer controller's permissions so it can't recreate them. Logs show only resource addresses and actions, because this repo's logs are public. See [ADR 0006](docs/adr/0006-infrastructure-pipeline.md).
 
 One-time setup, from your laptop after `aws login`:
 
