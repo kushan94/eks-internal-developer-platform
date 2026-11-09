@@ -8,7 +8,12 @@ metadata:
     github.com/project-slug: kushan94/eks-internal-developer-platform
     argocd/app-name: workload-${{ values.namespace }}
     platform.example.org/runtime: ${{ values.runtime }}
+    backstage.io/kubernetes-id: ${{ values.namespace }}-${{ values.name }}
+    backstage.io/kubernetes-namespace: ${{ values.namespace }}
 spec:
   type: service
   lifecycle: experimental
-  owner: group:default/guests
+  owner: ${{ values.owner }}
+  system: idp-services
+  dependsOn:
+    - resource:default/${{ 'ecs-cluster' if values.runtime == 'ecs' else 'eks-cluster' }}

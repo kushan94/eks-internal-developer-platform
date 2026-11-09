@@ -1,0 +1,59 @@
+# Infrastructure that Terraform creates. The EKS session resources exist only
+# while a session is running.
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: eks-cluster
+  title: EKS cluster
+  description: Runs the platform and Kubernetes-runtime services. Created per session.
+spec:
+  type: kubernetes-cluster
+  owner: group:default/platform-team
+  system: idp-platform
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: ecs-cluster
+  title: ECS cluster
+  description: Runs ECS Fargate-runtime services
+spec:
+  type: ecs-cluster
+  owner: group:default/platform-team
+  system: idp-platform
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: backstage-db
+  title: Backstage database
+  description: RDS PostgreSQL 18 for Backstage. Created per session.
+spec:
+  type: database
+  owner: group:default/platform-team
+  system: idp-platform
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: idp-gateway
+  title: Public gateway
+  description: Shared ALB that serves every public URL under idp.skyforgelab.cloud
+spec:
+  type: load-balancer
+  owner: group:default/platform-team
+  system: idp-platform
+  dependsOn:
+    - resource:default/eks-cluster
+    - resource:default/idp-dns
+---
+apiVersion: backstage.io/v1alpha1
+kind: Resource
+metadata:
+  name: idp-dns
+  title: Platform DNS
+  description: Route 53 zones for skyforgelab.cloud and idp.skyforgelab.cloud, with the wildcard certificate
+spec:
+  type: dns-zone
+  owner: group:default/platform-team
+  system: idp-platform

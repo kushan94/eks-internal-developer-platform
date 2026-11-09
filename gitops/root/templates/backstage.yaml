@@ -25,6 +25,10 @@ spec:
           resources:
             requests: { cpu: 250m, memory: 512Mi }
             limits: { memory: 1Gi }
+        # The Kubernetes plugin reads the cluster with this account.
+        serviceAccount:
+          create: true
+          name: backstage
         httpRoute:
           enabled: true
           parentRefs:
@@ -33,6 +37,49 @@ spec:
               sectionName: https
           hostnames: [backstage.{{ .Values.domain }}]
         extraDeploy:
+          # Read-only access for the Kubernetes plugin. Leaves out ConfigMaps
+          # and Secrets, which can hold settings people shouldn't browse.
+          - apiVersion: rbac.authorization.k8s.io/v1
+            kind: ClusterRole
+            metadata:
+              name: backstage-kubernetes-read
+            rules:
+              - apiGroups: [""]
+                resources: [pods, pods/log, services, limitranges, resourcequotas]
+                verbs: [get, list, watch]
+              - apiGroups: [apps]
+                resources: [deployments, replicasets, statefulsets, daemonsets]
+                verbs: [get, list, watch]
+              - apiGroups: [autoscaling]
+                resources: [horizontalpodautoscalers]
+                verbs: [get, list, watch]
+              - apiGroups: [networking.k8s.io]
+                resources: [ingresses]
+                verbs: [get, list, watch]
+              - apiGroups: [batch]
+                resources: [jobs, cronjobs]
+                verbs: [get, list, watch]
+              - apiGroups: [metrics.k8s.io]
+                resources: [pods]
+                verbs: [get, list]
+              - apiGroups: [platform.example.org]
+                resources: [webservices]
+                verbs: [get, list, watch]
+              - apiGroups: [gateway.networking.k8s.io]
+                resources: [httproutes]
+                verbs: [get, list, watch]
+          - apiVersion: rbac.authorization.k8s.io/v1
+            kind: ClusterRoleBinding
+            metadata:
+              name: backstage-kubernetes-read
+            roleRef:
+              apiGroup: rbac.authorization.k8s.io
+              kind: ClusterRole
+              name: backstage-kubernetes-read
+            subjects:
+              - kind: ServiceAccount
+                name: backstage
+                namespace: backstage
           # Secrets from AWS Secrets Manager, through External Secrets. The
           # placeholders are escaped twice: this chart renders them once, and
           # the Backstage chart passes extraDeploy through tpl again.

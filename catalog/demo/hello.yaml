@@ -8,7 +8,12 @@ metadata:
     github.com/project-slug: kushan94/eks-internal-developer-platform
     argocd/app-name: workload-demo
     platform.example.org/runtime: kubernetes
+    backstage.io/kubernetes-id: demo-hello
+    backstage.io/kubernetes-namespace: demo
 spec:
   type: service
   lifecycle: experimental
-  owner: group:default/guests
+  owner: group:default/platform-team
+  system: idp-services
+  dependsOn:
+    - resource:default/eks-cluster
