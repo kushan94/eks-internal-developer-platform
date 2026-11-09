@@ -75,6 +75,22 @@ kubernetes:
           url: https://kubernetes.default.svc
           authProvider: serviceAccount
           caFilePath: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+          # No metrics-server yet; avoids a warning on every service page.
+          skipMetricsLookup: true
+  # The default list includes ConfigMaps, which Backstage's role can't read.
+  objectTypes:
+    - pods
+    - services
+    - deployments
+    - replicasets
+    - horizontalpodautoscalers
+    - jobs
+    - cronjobs
+    - ingresses
+    - statefulsets
+    - daemonsets
+    - limitranges
+    - resourcequotas
   customResources:
     - group: platform.example.org
       apiVersion: v1alpha1
