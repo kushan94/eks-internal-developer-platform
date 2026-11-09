@@ -66,7 +66,11 @@ spec:
 | **Runtimes** | Kubernetes and ECS | Kubernetes only |
 | **Created by** | Crossplane's provider-sql | The CloudNativePG operator |
 
-The container gets `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD` and `PGSSLMODE`, and on Kubernetes also `DATABASE_URL`, so the app doesn't need to know which class it has. `kubectl get webservice` shows the class, and `status.database` names the host, database and Secret. Deleting the WebService deletes its database. See [ADR 0011](docs/adr/0011-databases.md).
+The container gets `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD` and `PGSSLMODE`, and on Kubernetes also `DATABASE_URL`, so the app doesn't need to know which class it has.
+
+**Try it:**
+- **[visits](apps/visits/main.go)** is a small demo app in the `demo` namespace with a managed database. Each page view adds a row and shows the count, the database and the login. On EKS it's at `https://visits-demo.idp.skyforgelab.cloud`.
+- **`make test-db`** runs an end-to-end check against the current cluster, kind or EKS (`make test-db KUBE_CONTEXT=idp`). It creates services with both classes, logs in with each one's environment, checks that one service can't open another's database, deletes them, and confirms the shared server has nothing left. `kubectl get webservice` shows the class, and `status.database` names the host, database and Secret. Deleting the WebService deletes its database. See [ADR 0011](docs/adr/0011-databases.md).
 
 ## Public URLs
 On EKS, add `public: true` to a Kubernetes-runtime WebService to serve it at `https://<name>-<namespace>.idp.skyforgelab.cloud`. Its URL appears in `kubectl get webservice` and in `status.url`. One shared ALB, created from a Gateway API Gateway, serves every public service, and ExternalDNS publishes the hostnames. See [ADR 0009](docs/adr/0009-public-urls.md).

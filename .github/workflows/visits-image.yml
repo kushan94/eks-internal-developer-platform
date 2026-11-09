@@ -1,0 +1,58 @@
+name: Visits image
+
+# Builds the visits demo app on every change to apps/visits/ on main, pushes
+# it to GitHub's container registry, then records the new tag in Git so Argo
+# CD deploys it. Built for amd64 (EKS) and arm64 (kind on Apple silicon).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - apps/visits/**
+      - .github/workflows/visits-image.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: visits-image
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/idp-visits
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build and push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: apps/visits
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE }}:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.description=The platform's database demo app
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Deploy the new image through Git
+        run: |
+          sed -i -E "s|^  image: ${IMAGE}:.*|  image: ${IMAGE}:${GITHUB_SHA}|" workloads/demo/visits.yaml
+          git diff --quiet && { echo "Tag unchanged."; exit 0; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Deploy visits ${GITHUB_SHA::7}"
+          git push
+          echo "Deployed visits image ${GITHUB_SHA::7}." >> "$GITHUB_STEP_SUMMARY"

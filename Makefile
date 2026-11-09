@@ -116,6 +116,9 @@ test: ## Render the WebService composition for both runtimes and each database c
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/db-managed.yaml
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/db-managed-ecs.yaml
 
+test-db: ## On a running cluster: create both database classes, log in, check isolation and cleanup
+	scripts/test-databases.sh $(KUBE_CONTEXT)
+
 bootstrap: ## Create the Terraform state bucket and GitHub IAM users (once, from your laptop)
 	terraform -chdir=infra/bootstrap init
 	terraform -chdir=infra/bootstrap apply
