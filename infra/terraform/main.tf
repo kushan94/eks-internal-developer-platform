@@ -92,7 +92,15 @@ module "eks" {
     coredns                = {}
     eks-pod-identity-agent = { before_compute = true }
     kube-proxy             = {}
-    vpc-cni                = { before_compute = true }
+    # Prefix delegation gives each network interface /28 prefixes instead of
+    # single IPs, so an m7i-flex.large runs 110 pods instead of 29. Managed
+    # node groups read it at creation, which before_compute makes sure of.
+    vpc-cni = {
+      before_compute = true
+      configuration_values = jsonencode({
+        env = { ENABLE_PREFIX_DELEGATION = "true" }
+      })
+    }
     # The association is part of the add-on, so the driver never starts without AWS access.
     aws-ebs-csi-driver = {
       pod_identity_association = [{
