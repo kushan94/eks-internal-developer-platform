@@ -14,6 +14,9 @@ metadata:
   links:
     - url: https://visits-demo.idp.skyforgelab.cloud
       title: Open the app
+    - url: https://grafana.idp.skyforgelab.cloud/d/webservice/webservice?var-service=demo-visits
+      title: Dashboard
+      icon: dashboard
 spec:
   type: service
   lifecycle: experimental

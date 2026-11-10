@@ -185,3 +185,14 @@ Copy this for each session:
   - The visits image was rejected before Kyverno even looked for a signature: its GHCR package is private, and Kyverno reads anonymously.
   - Kyverno's chart renders some CRDs with `labels: {}`. The API server drops empty maps, so Argo CD's default comparison showed the app as out of sync forever. Server-side diff fixed it; `ignoreDifferences` didn't.
 
+### 2026-11-10: Metrics and dashboards
+- **Goal:** Developers see how their service behaves without setting anything up, and services with their own metrics get them scraped by adding one field.
+- **What happened:**
+  - On kind, `kubectl top` worked, and Prometheus scraped both visits pods through the `PodMonitor` the composition created. It counted all 30 test page views.
+  - The `WebService` dashboard's queries found the service's two app pods and its in-cluster database through the Backstage ID label, with CPU and memory for each.
+  - Grafana loaded the dashboard at the URL the Backstage links use.
+- **What surprised me:**
+  - Both charts create a few objects in `kube-system`, which the platform's Argo CD project didn't allow, so they sat at "Missing" with a clear message.
+  - The monitoring stack pushed an 8 GB Colima VM, shared with another kind cluster, to a load average of 90, and the API server stopped answering. Pausing the other cluster fixed it. The platform now needs more than a laptop's spare memory.
+  - The newest kube-prometheus-stack was a day old. I pinned one from two weeks earlier, since a chart released that often is safer once it's had time to settle.
+

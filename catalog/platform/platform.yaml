@@ -85,3 +85,24 @@ spec:
   dependsOn:
     - resource:default/eks-cluster
     - resource:default/ecs-cluster
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: grafana
+  title: Grafana
+  description: Dashboards for the platform and every service, from Prometheus metrics
+  annotations:
+    github.com/project-slug: kushan94/eks-internal-developer-platform
+  links:
+    - url: https://grafana.idp.skyforgelab.cloud
+      title: Open Grafana
+      icon: dashboard
+spec:
+  type: service
+  lifecycle: experimental
+  owner: group:default/platform-team
+  system: idp-platform
+  dependsOn:
+    - resource:default/eks-cluster
+

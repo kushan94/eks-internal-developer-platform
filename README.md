@@ -95,6 +95,22 @@ Team namespaces, which Argo CD creates from `workloads/` and `apps/`, enforce:
 
 WebServices meet these by default. If an image names its user (such as `USER app`) instead of numbering it, set `runAsUser`. When a rule rejects a service, `kubectl get webservice` shows `SYNCED=False` and the condition says which rule and why. `make test` checks the policies against sample pods. See [ADR 0012](docs/adr/0012-guardrails.md).
 
+## Metrics and dashboards
+Every cluster runs metrics-server, Prometheus and Grafana. If a service serves Prometheus metrics, say where:
+
+```yaml
+spec:
+  metrics:
+    path: /metrics   # and port, if it isn't the service's port
+```
+
+The `WebService` dashboard shows any service's pods, CPU, memory, restarts and scrape health, including its in-cluster database. Each service's Backstage page links to it. On EKS, Grafana is at `https://grafana.idp.skyforgelab.cloud` with GitHub login, for the users listed in `grafanaAdmins` in [values.yaml](gitops/root/values.yaml). On kind, run `kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80`, and get the admin password from the `kube-prometheus-stack-grafana` secret. See [ADR 0013](docs/adr/0013-observability.md).
+
+One-time Grafana login setup for EKS:
+1. **Create a GitHub OAuth app:** GitHub → Settings → Developer settings → OAuth Apps → New. Use homepage `https://grafana.idp.skyforgelab.cloud` and callback `https://grafana.idp.skyforgelab.cloud/login/github`, then generate a client secret.
+2. **Create the secret:** run `make bootstrap` to create the empty Secrets Manager secret.
+3. **Store the credentials:** run `aws secretsmanager put-secret-value --secret-id idp/grafana/github-oauth --secret-string '{"clientId":"...","clientSecret":"..."}'`.
+
 ## Developer portal
 In the cluster, Backstage runs at `https://backstage.idp.skyforgelab.cloud` with GitHub sign-in. See [ADR 0010](docs/adr/0010-backstage-in-cluster.md).
 
@@ -154,7 +170,8 @@ colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
 - [x] **8. Traffic:** public HTTPS URLs with Gateway API on EKS, for the Kubernetes runtime
 - [ ] **8b. Traffic for ECS:** public URLs for the ECS runtime
 - [x] **9. Guardrails:** Pod Security Admission, Kyverno CEL policies and keyless image signing
-- [ ] **10. Observability, cost and scaling:** OpenTelemetry, Prometheus, Grafana, OpenCost, Karpenter and KEDA
+- [x] **10. Metrics:** metrics-server, Prometheus, Grafana with GitHub login, and a dashboard per service linked from Backstage
+- [ ] **10b. Tracing, cost and scaling:** OpenTelemetry, OpenCost, Karpenter and KEDA
 - [ ] **11. Article:** publish the write-up
 
 ## Repo access and other repos
@@ -254,6 +271,8 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 | External Secrets Operator chart | 2.14.0 |
 | provider-sql | 0.16.2 |
 | CloudNativePG chart | 0.29.1 (operator 1.30.1) |
+| kube-prometheus-stack chart | 92.14.1 (Prometheus Operator 0.94.2) |
+| metrics-server chart | 3.14.0 (metrics-server 0.9.0) |
 | Karpenter | 1.15.1 |
 
 ## Decisions
@@ -269,6 +288,7 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0010: Run Backstage in the cluster](docs/adr/0010-backstage-in-cluster.md)
 - [ADR 0011: Databases for WebServices, managed or in-cluster](docs/adr/0011-databases.md)
 - [ADR 0012: Guardrails with Pod Security Admission, Kyverno and signed images](docs/adr/0012-guardrails.md)
+- [ADR 0013: Metrics with Prometheus, Grafana and one dashboard per service](docs/adr/0013-observability.md)
 
 ## License
 [MIT](LICENSE)

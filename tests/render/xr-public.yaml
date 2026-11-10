@@ -9,3 +9,6 @@ spec:
   image: nginxinc/nginx-unprivileged:1.29-alpine
   port: 8080
   replicas: 2
+  metrics:
+    port: 9797
+    path: /metrics

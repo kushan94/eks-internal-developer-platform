@@ -1,5 +1,5 @@
 # IAM role that External Secrets Operator assumes through EKS Pod Identity.
-# It can only read secrets under idp/argocd/, idp/backstage/ and idp/platform/.
+# It can only read secrets under idp/argocd/, idp/backstage/, idp/platform/ and idp/grafana/.
 resource "aws_iam_role" "external_secrets" {
   count = var.enable_eks ? 1 : 0
   name  = "${var.cluster_name}-external-secrets"
@@ -33,6 +33,7 @@ resource "aws_iam_role_policy" "external_secrets" {
         "arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:idp/argocd/*",
         "arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:idp/backstage/*",
         "arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:idp/platform/*",
+        "arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:idp/grafana/*",
       ]
     }]
   })

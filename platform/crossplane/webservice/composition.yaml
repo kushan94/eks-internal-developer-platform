@@ -47,6 +47,12 @@ spec:
             {{- /* Lets Backstage's Kubernetes plugin find everything this WebService creates. */}}
             {{- $backstageId := printf "%s-%s" $ns $name }}
             {{- $url := "" }}
+            {{- /* Metrics come from the app's own port unless metrics.port names another. */}}
+            {{- $metricsPortName := "" }}
+            {{- with $xr.spec.metrics }}
+            {{- $metricsPortName = "http" }}
+            {{- if and .port (ne (int .port) (int $xr.spec.port)) }}{{ $metricsPortName = "metrics" }}{{ end }}
+            {{- end }}
             {{- /* Database: the same PG* variables for both classes, so apps don't care which they get. */}}
             {{- $dbClass := dig "database" "class" "" $xr.spec }}
             {{- $dbSecret := "" }}
@@ -103,7 +109,12 @@ spec:
                     - name: app
                       image: {{ $xr.spec.image }}
                       ports:
-                        - containerPort: {{ $xr.spec.port }}
+                        - name: http
+                          containerPort: {{ $xr.spec.port }}
+                        {{- if $metricsPortName | eq "metrics" }}
+                        - name: metrics
+                          containerPort: {{ $xr.spec.metrics.port }}
+                        {{- end }}
                       securityContext:
                         allowPrivilegeEscalation: false
                         capabilities:
@@ -155,6 +166,26 @@ spec:
               ports:
                 - port: 80
                   targetPort: {{ $xr.spec.port }}
+            {{- if $metricsPortName }}
+            ---
+            # Prometheus finds monitors in every namespace.
+            apiVersion: monitoring.coreos.com/v1
+            kind: PodMonitor
+            metadata:
+              name: {{ $name }}
+              labels:
+                backstage.io/kubernetes-id: {{ $backstageId }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: pod-monitor
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              selector:
+                matchLabels:
+                  app.kubernetes.io/name: {{ $name }}
+              podMetricsEndpoints:
+                - port: {{ $metricsPortName }}
+                  path: {{ $xr.spec.metrics.path | default "/metrics" }}
+            {{- end }}
             {{- if $xr.spec.public }}
             {{- $platform := dig "platform" dict $env }}
             {{- if not (and $platform.domain $platform.gateway) }}{{ fail "public WebServices need platform.domain and platform.gateway in the platform EnvironmentConfig" }}{{ end }}
