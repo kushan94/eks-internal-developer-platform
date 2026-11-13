@@ -41,7 +41,7 @@ tests:
               service: shop
             exp_annotations:
               summary: "shop in demo has no ready pods."
-              dashboard: "https://grafana.idp.skyforgelab.cloud/d/webservice/webservice?var-service=shop"
+              dashboard: "https://grafana.idp.skyforgelab.cloud/d/webservice/webservice?var-service=shop&var-environment=$__all"
 
   # shop's container restarts every 3 minutes; blog's restarted once.
   - interval: 1m
@@ -64,4 +64,32 @@ tests:
               service: shop
             exp_annotations:
               summary: "shop in demo restarted 5 times in 15 minutes."
-              dashboard: "https://grafana.idp.skyforgelab.cloud/d/webservice/webservice?var-service=shop"
+              dashboard: "https://grafana.idp.skyforgelab.cloud/d/webservice/webservice?var-service=shop&var-environment=$__all"
+
+  # visits runs in dev and prod; only prod's pod is down, and the alert says which environment.
+  - interval: 1m
+    input_series:
+      - series: 'kube_pod_labels{namespace="demo-prod", pod="visits-6c8d-aaaaa", label_backstage_io_kubernetes_id="demo-visits", label_platform_example_org_environment="prod"}'
+        values: "1x15"
+      - series: 'kube_pod_labels{namespace="demo-dev", pod="visits-7f9e-bbbbb", label_backstage_io_kubernetes_id="demo-visits", label_platform_example_org_environment="dev"}'
+        values: "1x15"
+      - series: 'kube_pod_owner{namespace="demo-prod", pod="visits-6c8d-aaaaa", owner_kind="ReplicaSet", owner_name="visits-6c8d"}'
+        values: "1x15"
+      - series: 'kube_pod_owner{namespace="demo-dev", pod="visits-7f9e-bbbbb", owner_kind="ReplicaSet", owner_name="visits-7f9e"}'
+        values: "1x15"
+      - series: 'kube_pod_status_ready{namespace="demo-prod", pod="visits-6c8d-aaaaa", condition="true"}'
+        values: "0x15"
+      - series: 'kube_pod_status_ready{namespace="demo-dev", pod="visits-7f9e-bbbbb", condition="true"}'
+        values: "1x15"
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: WebServiceDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              namespace: demo-prod
+              service: demo-visits
+              environment: prod
+            exp_annotations:
+              summary: "demo-visits in demo-prod has no ready pods."
+              dashboard: "https://grafana.idp.skyforgelab.cloud/d/webservice/webservice?var-service=demo-visits&var-environment=prod"

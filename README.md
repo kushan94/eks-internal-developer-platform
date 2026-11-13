@@ -69,10 +69,23 @@ spec:
 The container gets `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD` and `PGSSLMODE`, and on Kubernetes also `DATABASE_URL`, so the app doesn't need to know which class it has.
 
 **Try it:**
-- **[visits](apps/visits/main.go)** is a small demo app in the `demo` namespace with a managed database. Each page view adds a row and shows the count, the database and the login. On EKS it's at `https://visits-demo.idp.skyforgelab.cloud`.
+- **[visits](apps/visits/main.go)** is a small demo app with a managed database, in dev, staging and prod. Each page view adds a row and shows the count, the database and the login. On EKS it's at `https://visits-demo-<env>.idp.skyforgelab.cloud`.
 - **`make test-db`** runs an end-to-end check against the current cluster, kind or EKS (`make test-db KUBE_CONTEXT=idp`). It creates services with both classes, logs in with each one's environment, checks that one service can't open another's database, deletes them, and confirms the shared server has nothing left. `kubectl get webservice` shows the class, and `status.database` names the host, database and Secret. Deleting the WebService deletes its database. See [ADR 0011](docs/adr/0011-databases.md).
 
 **Backups:** with the production profile, both RDS instances keep 7 days of automated backups, including point-in-time restore, and keep them after the nightly destroy. **`make rds-restore-drill KUBE_CONTEXT=idp-eks`** restores the shared server to a new instance and checks the data is there. See [ADR 0017](docs/adr/0017-rds-backups.md). In-cluster databases are backed up as EBS snapshots when they're created and every 6 hours, and **`make cnpg-restore-drill`** restores one into a new cluster. See [ADR 0018](docs/adr/0018-cloudnativepg-backups.md).
+
+## Environments
+A service can run in dev, staging and prod, each in its own namespace (`<team>-dev`, `<team>-staging`, `<team>-prod`) with its own database:
+
+```
+workloads/demo/visits/
+  base/            the WebService, without an image
+  envs/dev/        image and overrides  ->  demo-dev
+  envs/staging/    image and overrides  ->  demo-staging
+  envs/prod/       image and overrides  ->  demo-prod (at least 2 replicas)
+```
+
+New builds of visits go to dev automatically. One Backstage component, dashboard and set of alerts covers every environment, with an environment label to tell them apart. Services written as a single file in `workloads/<team>/` keep working as before. See [ADR 0021](docs/adr/0021-environments.md).
 
 ## Public URLs
 On EKS, add `public: true` to a Kubernetes-runtime WebService to serve it at `https://<name>-<namespace>.idp.skyforgelab.cloud`. Its URL appears in `kubectl get webservice` and in `status.url`. One shared ALB, created from a Gateway API Gateway, serves every public service, and ExternalDNS publishes the hostnames. See [ADR 0009](docs/adr/0009-public-urls.md).
@@ -309,6 +322,7 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0018: Back up in-cluster databases as EBS snapshots](docs/adr/0018-cloudnativepg-backups.md)
 - [ADR 0019: Logs for every service with Loki and Alloy](docs/adr/0019-logs.md)
 - [ADR 0020: Isolate every service's inbound traffic with NetworkPolicies](docs/adr/0020-network-policies.md)
+- [ADR 0021: Environments as namespaces, promoted through Git](docs/adr/0021-environments.md)
 
 ## License
 [MIT](LICENSE)

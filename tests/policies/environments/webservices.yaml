@@ -1,0 +1,27 @@
+# WebServices in a prod and a dev namespace, for the environment policies.
+apiVersion: platform.example.org/v1alpha1
+kind: WebService
+metadata:
+  name: prod-two
+  namespace: demo-prod
+spec:
+  image: nginxinc/nginx-unprivileged:1.29-alpine
+  replicas: 2
+---
+apiVersion: platform.example.org/v1alpha1
+kind: WebService
+metadata:
+  name: prod-one
+  namespace: demo-prod
+spec:
+  image: nginxinc/nginx-unprivileged:1.29-alpine
+  replicas: 1
+---
+apiVersion: platform.example.org/v1alpha1
+kind: WebService
+metadata:
+  name: dev-one
+  namespace: demo-dev
+spec:
+  image: nginxinc/nginx-unprivileged:1.29-alpine
+  replicas: 1

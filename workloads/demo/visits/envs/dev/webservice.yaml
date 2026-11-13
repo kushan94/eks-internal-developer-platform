@@ -1,0 +1,8 @@
+# The image workflow writes each new build here.
+apiVersion: platform.example.org/v1alpha1
+kind: WebService
+metadata:
+  name: visits
+spec:
+  image: ghcr.io/kushan94/idp-visits:abfad8f78730c500a740b68069fd7ae1cd3d083d
+  replicas: 1

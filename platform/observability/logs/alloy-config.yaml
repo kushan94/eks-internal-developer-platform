@@ -36,6 +36,10 @@ data:
         source_labels = ["__meta_kubernetes_pod_label_backstage_io_kubernetes_id"]
         target_label  = "service"
       }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_label_platform_example_org_environment"]
+        target_label  = "environment"
+      }
       // The kubelet writes to /var/log/pods/<namespace>_<pod>_<uid>/<container>/.
       rule {
         source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]

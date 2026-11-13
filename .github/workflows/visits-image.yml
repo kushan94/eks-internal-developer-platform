@@ -60,11 +60,12 @@ jobs:
         run: cosign sign --yes "${IMAGE}@${DIGEST}"
       - name: Deploy the new image through Git
         run: |
-          sed -i -E "s|^  image: ${IMAGE}:.*|  image: ${IMAGE}:${GITHUB_SHA}|" workloads/demo/visits.yaml
+          # New builds go to dev; the Promote workflow moves them on to staging and prod.
+          sed -i -E "s|^  image: ${IMAGE}:.*|  image: ${IMAGE}:${GITHUB_SHA}|" workloads/demo/visits/envs/dev/webservice.yaml
           git diff --quiet && { echo "Tag unchanged."; exit 0; }
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -am "Deploy visits ${GITHUB_SHA::7}"
+          git commit -am "Deploy visits ${GITHUB_SHA::7} to dev"
           # The other image workflow may have pushed to main in the meantime.
           for attempt in 1 2 3 4 5; do
             git push && break
@@ -72,4 +73,4 @@ jobs:
             sleep $((attempt * 5))
             git pull --rebase
           done
-          echo "Deployed visits image ${GITHUB_SHA::7}." >> "$GITHUB_STEP_SUMMARY"
+          echo "Deployed visits image ${GITHUB_SHA::7} to dev." >> "$GITHUB_STEP_SUMMARY"

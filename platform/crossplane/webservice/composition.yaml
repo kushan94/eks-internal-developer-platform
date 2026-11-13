@@ -47,7 +47,11 @@ spec:
             {{- /* The production profile on EKS sets this in the aws-platform EnvironmentConfig. */}}
             {{- $ha := dig "highAvailability" false $env }}
             {{- /* Lets Backstage's Kubernetes plugin find everything this WebService creates. */}}
-            {{- $backstageId := printf "%s-%s" $ns $name }}
+            {{- /* A service in several environments shares one ID, set as a label on its
+                   WebService; otherwise it's <namespace>-<name>. */}}
+            {{- $backstageId := dig "metadata" "labels" "backstage.io/kubernetes-id" (printf "%s-%s" $ns $name) $xr }}
+            {{- /* dev, staging or prod for services with environments, set by their kustomization. */}}
+            {{- $environment := dig "metadata" "labels" "platform.example.org/environment" "" $xr }}
             {{- $url := "" }}
             {{- /* Metrics come from the app's own port unless metrics.port names another. */}}
             {{- $metricsPortName := "" }}
@@ -71,8 +75,8 @@ spec:
             {{- range $key := list "providerConfigName" "host" "port" "adminRole" }}
             {{- if not (hasKey $pg $key) }}{{ fail (printf "managed databases need managedPostgres.%s in the managed-postgres or aws-platform EnvironmentConfig" $key) }}{{ end }}
             {{- end }}
-            {{- /* One database and login per service on the shared server, named after its namespace. */}}
-            {{- $dbName = $backstageId }}
+            {{- /* One database and login per service and environment on the shared server. */}}
+            {{- $dbName = printf "%s-%s" $ns $name }}
             {{- if gt (len $dbName) 63 }}{{ fail (printf "the database name %s is longer than Postgres' 63 characters; shorten the namespace or name" $dbName) }}{{ end }}
             {{- $dbSecret = printf "%s-db" $name }}
             {{- $dbHost = $pg.host }}
@@ -98,6 +102,9 @@ spec:
                   labels:
                     app.kubernetes.io/name: {{ $name }}
                     backstage.io/kubernetes-id: {{ $backstageId }}
+                    {{- with $environment }}
+                    platform.example.org/environment: {{ . }}
+                    {{- end }}
                 spec:
                   # Spread replicas across zones, then nodes, so one failure never takes
                   # them all. Soft, so a single-zone cluster such as kind still schedules them.
@@ -466,6 +473,9 @@ spec:
               inheritedMetadata:
                 labels:
                   backstage.io/kubernetes-id: {{ $backstageId }}
+                  {{- with $environment }}
+                  platform.example.org/environment: {{ . }}
+                  {{- end }}
               storage:
                 size: 1Gi
               resources:

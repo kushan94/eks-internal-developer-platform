@@ -86,9 +86,10 @@ spec:
             serviceMonitorSelectorNilUsesHelmValues: false
             ruleSelectorNilUsesHelmValues: false
         kube-state-metrics:
-          # Lets dashboards find a service's pods by its Backstage ID.
+          # Lets dashboards and alerts find a service's pods by its Backstage ID,
+          # and tell its environments apart.
           metricLabelsAllowlist:
-            - pods=[backstage.io/kubernetes-id]
+            - pods=[backstage.io/kubernetes-id,platform.example.org/environment]
         grafana:
           defaultDashboardsTimezone: utc
           additionalDataSources:
