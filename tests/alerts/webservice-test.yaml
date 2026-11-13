@@ -1,0 +1,67 @@
+# promtool unit tests for platform/observability/alerts/webservice.yaml.
+# make test extracts the rule groups from the PrometheusRule into
+# .test/alerts/webservice.yaml first.
+rule_files:
+  - ../../.test/alerts/webservice.yaml
+
+evaluation_interval: 1m
+
+tests:
+  # shop's app pod is not ready, while its database pod is. blog is fine.
+  - interval: 1m
+    input_series:
+      - series: 'kube_pod_labels{namespace="demo", pod="shop-7d9f-abcde", label_backstage_io_kubernetes_id="shop"}'
+        values: "1x15"
+      - series: 'kube_pod_labels{namespace="demo", pod="shop-db-1", label_backstage_io_kubernetes_id="shop"}'
+        values: "1x15"
+      - series: 'kube_pod_labels{namespace="demo", pod="blog-5c4b-fghij", label_backstage_io_kubernetes_id="blog"}'
+        values: "1x15"
+      - series: 'kube_pod_owner{namespace="demo", pod="shop-7d9f-abcde", owner_kind="ReplicaSet", owner_name="shop-7d9f"}'
+        values: "1x15"
+      - series: 'kube_pod_owner{namespace="demo", pod="shop-db-1", owner_kind="Cluster", owner_name="shop-db"}'
+        values: "1x15"
+      - series: 'kube_pod_owner{namespace="demo", pod="blog-5c4b-fghij", owner_kind="ReplicaSet", owner_name="blog-5c4b"}'
+        values: "1x15"
+      - series: 'kube_pod_status_ready{namespace="demo", pod="shop-7d9f-abcde", condition="true"}'
+        values: "0x15"
+      - series: 'kube_pod_status_ready{namespace="demo", pod="shop-db-1", condition="true"}'
+        values: "1x15"
+      - series: 'kube_pod_status_ready{namespace="demo", pod="blog-5c4b-fghij", condition="true"}'
+        values: "1x15"
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: WebServiceDown
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: WebServiceDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              namespace: demo
+              service: shop
+            exp_annotations:
+              summary: "shop in demo has no ready pods."
+              dashboard: "https://grafana.idp.skyforgelab.cloud/d/webservice/webservice?var-service=shop"
+
+  # shop's container restarts every 3 minutes; blog's restarted once.
+  - interval: 1m
+    input_series:
+      - series: 'kube_pod_labels{namespace="demo", pod="shop-7d9f-abcde", label_backstage_io_kubernetes_id="shop"}'
+        values: "1x30"
+      - series: 'kube_pod_labels{namespace="demo", pod="blog-5c4b-fghij", label_backstage_io_kubernetes_id="blog"}'
+        values: "1x30"
+      - series: 'kube_pod_container_status_restarts_total{namespace="demo", pod="shop-7d9f-abcde", container="app"}'
+        values: "0 0 0 1 1 1 2 2 2 3 3 3 4 4 4 5 5 5 6 6 6 7 7 7 8 8 8 9 9 9 10"
+      - series: 'kube_pod_container_status_restarts_total{namespace="demo", pod="blog-5c4b-fghij", container="app"}'
+        values: "0 0 0 1x27"
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: WebServiceRestarting
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              namespace: demo
+              service: shop
+            exp_annotations:
+              summary: "shop in demo restarted 5 times in 15 minutes."
+              dashboard: "https://grafana.idp.skyforgelab.cloud/d/webservice/webservice?var-service=shop"

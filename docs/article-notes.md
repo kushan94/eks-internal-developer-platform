@@ -196,3 +196,24 @@ Copy this for each session:
   - The monitoring stack pushed an 8 GB Colima VM, shared with another kind cluster, to a load average of 90, and the API server stopped answering. Pausing the other cluster fixed it. The platform now needs more than a laptop's spare memory.
   - The newest kube-prometheus-stack was a day old. I pinned one from two weeks earlier, since a chart released that often is safer once it's had time to settle.
 
+
+### 2026-11-10: Checking guardrails, metrics and databases on EKS
+- **Goal:** See everything built on kind since the last EKS session work on the real cluster.
+- **What happened:**
+  - Kyverno refused `:latest` and a Docker Hub image with the same messages as on kind, and admitted the signed visits image. Pod Security refused pods without a security context before Kyverno saw them.
+  - visits counted page views in RDS at its public URL, over TLS.
+  - Grafana's GitHub login worked after one fix, and only for the listed user.
+- **What surprised me:**
+  - **The nodes ran out of pods, not memory.** An m7i-flex.large gets 29 pod IPs from its network interfaces. After the monitoring stack, both nodes held 29 or 30 pods while CPU and memory requests were at most two-thirds used, so `make test-db`'s pods stayed Pending. VPC CNI prefix delegation raises the limit to 110.
+  - **Grafana's GitHub login needs `read:org`** even when nothing uses teams. Grafana always asks GitHub for the user's teams, and GitHub answers 404 without that scope, which Grafana shows as an internal error.
+  - **Argo CD kept the Grafana route OutOfSync** because the API server fills in defaults the manifest left out. The other routes already spelled them out; this one hadn't.
+  - **The nightly destroy runs late.** It's scheduled for 22:00 UTC, but GitHub has started it as late as 03:56. Start a session at 21:55 and it may still tear the cluster down halfway through.
+  - **Two bots raced to push to `main`.** A merge that changed both apps started both image workflows, and the second push was rejected. The Backstage tag in Git had been stale for two merges without anyone noticing.
+
+### 2026-11-13: Alerts
+- **Goal:** Find out that a service is down without watching a dashboard.
+- **What happened:**
+  - Two rules cover every `WebService`: no ready pods for 5 minutes, and repeated restarts. Each names the service and links to its dashboard.
+  - On EKS they go to a Slack or Discord channel through Alertmanager. The webhook URL lives in Secrets Manager.
+  - `make test` unit-tests the rules with `promtool`. Removing the "only the app's own pods" filter makes a test fail.
+- **What surprised me:** CloudNativePG pods carry the service's label too, which is what lets the dashboard show the database. For "is the service down", that's wrong: a healthy database pod would hide a dead app. The rule counts only pods owned by a ReplicaSet.

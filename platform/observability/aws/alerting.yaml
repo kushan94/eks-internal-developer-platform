@@ -1,0 +1,56 @@
+# EKS only: send warning and critical alerts to a Slack or Discord channel.
+# The incoming webhook's URL lives in Secrets Manager (idp/alerting/webhook)
+# and is never committed. For Discord, store the webhook URL with /slack on
+# the end, which is Discord's Slack-compatible endpoint.
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: alertmanager-webhook
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: aws-secrets-manager
+  target:
+    name: alertmanager-webhook
+    template:
+      data:
+        url: "{{ .url }}"
+  dataFrom:
+    - extract:
+        key: idp/alerting/webhook
+---
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: chat
+  labels:
+    platform.example.org/alerting: "true"
+spec:
+  route:
+    receiver: chat
+    groupBy: [alertname, namespace, service]
+    groupWait: 30s
+    groupInterval: 5m
+    repeatInterval: 4h
+    matchers:
+      - name: severity
+        matchType: "=~"
+        value: warning|critical
+      # Watchdog always fires to show the pipeline works; InfoInhibitor only
+      # exists to silence info alerts.
+      - name: alertname
+        matchType: "!~"
+        value: Watchdog|InfoInhibitor
+  receivers:
+    - name: chat
+      slackConfigs:
+        - apiURL:
+            name: alertmanager-webhook
+            key: url
+          sendResolved: true
+          title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}{{ with .CommonLabels.service }} · {{ . }}{{ end }}'
+          text: |-
+            {{ range .Alerts }}{{ if .Annotations.summary }}{{ .Annotations.summary }}{{ else }}{{ .Annotations.description }}{{ end }}
+            {{ with .Annotations.dashboard }}Dashboard: {{ . }}
+            {{ end }}{{ end }}

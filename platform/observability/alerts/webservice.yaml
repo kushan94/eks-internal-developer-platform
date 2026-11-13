@@ -1,0 +1,50 @@
+# Alerts for every WebService. Pods are matched to their service through the
+# backstage.io/kubernetes-id label, which kube-state-metrics exports as
+# label_backstage_io_kubernetes_id, and each alert carries a service label and
+# a link to that service's Grafana dashboard.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: webservice
+spec:
+  groups:
+    - name: webservice
+      rules:
+        # A service's containers restarted more than twice in 15 minutes,
+        # including its in-cluster database.
+        - alert: WebServiceRestarting
+          expr: |
+            sum by (namespace, service) (
+              label_replace(
+                increase(kube_pod_container_status_restarts_total[15m])
+                * on (namespace, pod) group_left (label_backstage_io_kubernetes_id)
+                kube_pod_labels{label_backstage_io_kubernetes_id!=""},
+                "service", "$1", "label_backstage_io_kubernetes_id", "(.+)"
+              )
+            ) > 2
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: '{{ $labels.service }} in {{ $labels.namespace }} restarted {{ printf "%.0f" $value }} times in 15 minutes.'
+            dashboard: "https://grafana.idp.skyforgelab.cloud/d/webservice/webservice?var-service={{ $labels.service }}"
+        # None of a service's own pods are ready. Only pods owned by a
+        # ReplicaSet count, so a ready database pod doesn't hide a dead app.
+        - alert: WebServiceDown
+          expr: |
+            sum by (namespace, service) (
+              label_replace(
+                kube_pod_status_ready{condition="true"}
+                * on (namespace, pod) group_left (label_backstage_io_kubernetes_id)
+                kube_pod_labels{label_backstage_io_kubernetes_id!=""}
+                * on (namespace, pod) group_left ()
+                kube_pod_owner{owner_kind="ReplicaSet"},
+                "service", "$1", "label_backstage_io_kubernetes_id", "(.+)"
+              )
+            ) == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "{{ $labels.service }} in {{ $labels.namespace }} has no ready pods."
+            dashboard: "https://grafana.idp.skyforgelab.cloud/d/webservice/webservice?var-service={{ $labels.service }}"
