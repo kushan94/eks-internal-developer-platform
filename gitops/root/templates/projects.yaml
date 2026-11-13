@@ -18,6 +18,7 @@ spec:
     - https://prometheus-community.github.io/helm-charts
     - https://kubernetes-sigs.github.io/metrics-server/
     - https://grafana.github.io/helm-charts
+    - https://opencost.github.io/opencost-helm-chart
   destinations:
     {{- range list "crossplane-system" "aws-load-balancer-controller" "external-dns" "gateway-system" "backstage" "cnpg-system" "kyverno" "monitoring" "kube-system" }}
     - server: https://kubernetes.default.svc

@@ -1,4 +1,4 @@
-# Alerts for every WebService. Pods are matched to their service through the
+# Alerts and cost for every WebService. Pods are matched to their service through the
 # backstage.io/kubernetes-id label, which kube-state-metrics exports as
 # label_backstage_io_kubernetes_id, and each alert carries a service label and
 # a link to that service's Grafana dashboard. Services with environments also
@@ -51,3 +51,24 @@ spec:
           annotations:
             summary: "{{ $labels.service }} in {{ $labels.namespace }} has no ready pods."
             dashboard: "https://grafana.idp.skyforgelab.cloud/d/webservice/webservice?var-service={{ $labels.service }}&var-environment={{ or $labels.environment \"$__all\" }}"
+    # What each service costs, from OpenCost: the CPU and memory its containers
+    # are allocated, at their node's hourly prices. It includes the service's
+    # in-cluster database. Shared parts, such as the control plane, the
+    # platform's own pods and RDS, aren't divided up.
+    - name: webservice-cost
+      rules:
+        - record: webservice:cost_dollars_per_hour
+          expr: |
+            sum by (namespace, service, environment) (
+              label_replace(label_replace(
+                (
+                  container_cpu_allocation * on (node) group_left () node_cpu_hourly_cost
+                  + on (namespace, pod, container)
+                  container_memory_allocation_bytes / 1073741824 * on (node) group_left () node_ram_hourly_cost
+                )
+                * on (namespace, pod) group_left (label_backstage_io_kubernetes_id, label_platform_example_org_environment)
+                kube_pod_labels{label_backstage_io_kubernetes_id!=""},
+                "service", "$1", "label_backstage_io_kubernetes_id", "(.+)"),
+                "environment", "$1", "label_platform_example_org_environment", "(.+)"
+              )
+            )
