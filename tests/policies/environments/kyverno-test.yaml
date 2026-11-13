@@ -1,0 +1,17 @@
+# `kyverno test tests/policies`: prod refuses one replica; dev doesn't care.
+apiVersion: cli.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: environments
+policies:
+  - ../../../platform/policies/environments.yaml
+resources:
+  - webservices.yaml
+variables: ../values.yaml
+results:
+  - policy: prod-replicas
+    resources: [prod-one]
+    result: fail
+  - policy: prod-replicas
+    resources: [prod-two]
+    result: pass

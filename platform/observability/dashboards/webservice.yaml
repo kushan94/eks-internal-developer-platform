@@ -42,6 +42,29 @@ data:
             "sort": 1,
             "includeAll": false,
             "multi": false
+          },
+          {
+            "name": "environment",
+            "label": "Environment",
+            "type": "query",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "prometheus"
+            },
+            "query": {
+              "query": "label_values(kube_pod_labels{label_backstage_io_kubernetes_id=\"$service\"}, label_platform_example_org_environment)",
+              "refId": "environment"
+            },
+            "definition": "label_values(kube_pod_labels{label_backstage_io_kubernetes_id=\"$service\"}, label_platform_example_org_environment)",
+            "refresh": 2,
+            "sort": 1,
+            "includeAll": true,
+            "multi": false,
+            "allValue": ".*",
+            "current": {
+              "text": "All",
+              "value": "$__all"
+            }
           }
         ]
       },
@@ -86,7 +109,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "count((kube_pod_status_phase{phase=\"Running\"} == 1) and on(namespace, pod) kube_pod_labels{label_backstage_io_kubernetes_id=\"$service\"})",
+              "expr": "count((kube_pod_status_phase{phase=\"Running\"} == 1) and on(namespace, pod) kube_pod_labels{label_backstage_io_kubernetes_id=\"$service\", label_platform_example_org_environment=~\"$environment\"})",
               "instant": true
             }
           ]
@@ -131,7 +154,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "sum(increase(kube_pod_container_status_restarts_total[24h]) and on(namespace, pod) kube_pod_labels{label_backstage_io_kubernetes_id=\"$service\"}) or vector(0)",
+              "expr": "sum(increase(kube_pod_container_status_restarts_total[24h]) and on(namespace, pod) kube_pod_labels{label_backstage_io_kubernetes_id=\"$service\", label_platform_example_org_environment=~\"$environment\"}) or vector(0)",
               "instant": true
             }
           ]
@@ -176,7 +199,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "sum((container_memory_working_set_bytes{container!=\"\", container!=\"POD\"}) and on(namespace, pod) kube_pod_labels{label_backstage_io_kubernetes_id=\"$service\"})",
+              "expr": "sum((container_memory_working_set_bytes{container!=\"\", container!=\"POD\"}) and on(namespace, pod) kube_pod_labels{label_backstage_io_kubernetes_id=\"$service\", label_platform_example_org_environment=~\"$environment\"})",
               "instant": true
             }
           ]
@@ -221,7 +244,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "sum((up) and on(namespace, pod) kube_pod_labels{label_backstage_io_kubernetes_id=\"$service\"}) / count((up) and on(namespace, pod) kube_pod_labels{label_backstage_io_kubernetes_id=\"$service\"})",
+              "expr": "sum((up) and on(namespace, pod) kube_pod_labels{label_backstage_io_kubernetes_id=\"$service\", label_platform_example_org_environment=~\"$environment\"}) / count((up) and on(namespace, pod) kube_pod_labels{label_backstage_io_kubernetes_id=\"$service\", label_platform_example_org_environment=~\"$environment\"})",
               "instant": true
             }
           ]
@@ -269,7 +292,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{container!=\"\", container!=\"POD\"}[5m]) and on(namespace, pod) kube_pod_labels{label_backstage_io_kubernetes_id=\"$service\"})",
+              "expr": "sum by (pod) (rate(container_cpu_usage_seconds_total{container!=\"\", container!=\"POD\"}[5m]) and on(namespace, pod) kube_pod_labels{label_backstage_io_kubernetes_id=\"$service\", label_platform_example_org_environment=~\"$environment\"})",
               "legendFormat": "{{pod}}"
             }
           ]
@@ -317,7 +340,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "sum by (pod) ((container_memory_working_set_bytes{container!=\"\", container!=\"POD\"}) and on(namespace, pod) kube_pod_labels{label_backstage_io_kubernetes_id=\"$service\"})",
+              "expr": "sum by (pod) ((container_memory_working_set_bytes{container!=\"\", container!=\"POD\"}) and on(namespace, pod) kube_pod_labels{label_backstage_io_kubernetes_id=\"$service\", label_platform_example_org_environment=~\"$environment\"})",
               "legendFormat": "{{pod}}"
             }
           ]
@@ -365,7 +388,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "sum by (pod) (rate(container_network_receive_bytes_total[5m]) and on(namespace, pod) kube_pod_labels{label_backstage_io_kubernetes_id=\"$service\"})",
+              "expr": "sum by (pod) (rate(container_network_receive_bytes_total[5m]) and on(namespace, pod) kube_pod_labels{label_backstage_io_kubernetes_id=\"$service\", label_platform_example_org_environment=~\"$environment\"})",
               "legendFormat": "{{pod}}"
             }
           ]
@@ -413,7 +436,7 @@ data:
                 "type": "prometheus",
                 "uid": "prometheus"
               },
-              "expr": "sum by (pod, container) (increase(kube_pod_container_status_restarts_total[1h]) and on(namespace, pod) kube_pod_labels{label_backstage_io_kubernetes_id=\"$service\"})",
+              "expr": "sum by (pod, container) (increase(kube_pod_container_status_restarts_total[1h]) and on(namespace, pod) kube_pod_labels{label_backstage_io_kubernetes_id=\"$service\", label_platform_example_org_environment=~\"$environment\"})",
               "legendFormat": "{{pod}} / {{container}}"
             }
           ]
@@ -445,7 +468,7 @@ data:
                 "type": "loki",
                 "uid": "loki"
               },
-              "expr": "{service=\"$service\"}"
+              "expr": "{service=\"$service\", environment=~\"$environment\"}"
             }
           ]
         }

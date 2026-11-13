@@ -45,3 +45,59 @@ spec:
             duration: 15s
             factor: 2
             maxDuration: 2m
+---
+# Services with environments: each workloads/<team>/<service>/envs/<env>
+# directory is a kustomization, deployed to the <team>-<env> namespace.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: workload-environments
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+  generators:
+    - git:
+        repoURL: {{ .Values.repoURL }}
+        revision: {{ .Values.targetRevision }}
+        directories:
+          - path: workloads/*/*/envs/*
+  template:
+    metadata:
+      name: 'workload-{{ "{{ index .path.segments 1 }}-{{ index .path.segments 2 }}-{{ .path.basename }}" }}'
+      labels:
+        # Lets Backstage's Argo CD card show every environment of a service.
+        backstage.io/kubernetes-id: '{{ "{{ index .path.segments 1 }}-{{ index .path.segments 2 }}" }}'
+        platform.example.org/environment: '{{ "{{ .path.basename }}" }}'
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: workloads
+      source:
+        repoURL: {{ .Values.repoURL }}
+        targetRevision: {{ .Values.targetRevision }}
+        path: '{{ "{{ .path.path }}" }}'
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: '{{ "{{ index .path.segments 1 }}-{{ .path.basename }}" }}'
+      syncPolicy:
+        # The same guardrails as other team namespaces, plus the environment,
+        # which policies such as the prod replica minimum key on.
+        managedNamespaceMetadata:
+          labels:
+            platform.example.org/workload: "true"
+            platform.example.org/environment: '{{ "{{ .path.basename }}" }}'
+            pod-security.kubernetes.io/enforce: restricted
+            pod-security.kubernetes.io/enforce-version: latest
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - SkipDryRunOnMissingResource=true
+        retry:
+          limit: 20
+          backoff:
+            duration: 15s
+            factor: 2
+            maxDuration: 2m

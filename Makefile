@@ -90,7 +90,7 @@ aws-environment: ## Apply the aws-platform EnvironmentConfig from Terraform outp
 	$(KUBECTL) wait crd environmentconfigs.apiextensions.crossplane.io --for=condition=Established --timeout=60s
 	terraform -chdir=infra/terraform output -raw aws_platform_environment | $(KUBECTL) apply -f -
 
-test: ## Render the WebService composition for each runtime, database class and profile, validate it, test the Kyverno policies, the alert rules and the log pipeline
+test: ## Render the WebService composition for each runtime, database class, profile and environment, build every environment, validate it, test the Kyverno policies, the alert rules and the log pipeline
 	@rm -rf .test && mkdir -p .test/schemas
 	cp platform/crossplane/aws/providers.yaml platform/crossplane/webservice/definition.yaml .test/schemas/
 	$(CROSSPLANE) render --include-full-xr tests/render/xr-kubernetes.yaml \
@@ -115,6 +115,13 @@ test: ## Render the WebService composition for each runtime, database class and 
 		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml \
 		--extra-resources platform/crossplane/aws/environment.example.yaml \
 		--observed-resources tests/render/observed-db-managed-ecs.yaml > .test/db-managed-ecs.yaml
+	$(CROSSPLANE) render --include-full-xr tests/render/xr-environment.yaml \
+		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml \
+		--extra-resources platform/managed-postgres/local/shared-postgres.yaml > .test/environment.yaml
+	@# Every environment of every service builds, and is a valid WebService.
+	for env in workloads/*/*/envs/*; do \
+		kubectl kustomize $$env > .test/env-$$(echo $$env | tr / -).yaml || exit 1; \
+	done
 	cp platform/crossplane/webservice/provider-sql.yaml .test/schemas/
 	curl -fsSL -o .test/schemas/httproutes.yaml \
 		https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.6.0/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml
@@ -130,10 +137,15 @@ test: ## Render the WebService composition for each runtime, database class and 
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/db-in-cluster.yaml
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/db-in-cluster-ha.yaml
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/db-managed.yaml
+	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/environment.yaml
+	for f in .test/env-*.yaml; do $(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas $$f || exit 1; done
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/db-managed-ecs.yaml
 	@# The production profile runs in-cluster databases as three instances; the study profile as one.
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Cluster") | .spec.instances == 3' .test/db-in-cluster-ha.yaml
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Cluster") | .spec.instances == 1' .test/db-in-cluster.yaml
+	@# Environments share the service's Backstage ID but get their own database.
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Deployment") | (.spec.template.metadata.labels["platform.example.org/environment"] == "prod" and .spec.template.metadata.labels["backstage.io/kubernetes-id"] == "demo-visits")' .test/environment.yaml
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Database") | .metadata.annotations["crossplane.io/external-name"] == "demo-prod-visits"' .test/environment.yaml
 	@# Every service is isolated; public ones also let in the load balancer's subnets.
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "NetworkPolicy") | .spec.ingress | length == 1' .test/kubernetes.yaml
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "NetworkPolicy") | .spec.ingress[1].from[0].ipBlock.cidr == "10.42.128.0/20"' .test/public.yaml
