@@ -1,0 +1,21 @@
+apiVersion: platform.example.org/v1alpha1
+kind: WebService
+metadata:
+  name: ${{ values.name }}
+  labels:
+    backstage.io/kubernetes-id: ${{ values.namespace }}-${{ values.name }}
+spec:
+  runtime: ${{ values.runtime }}
+  image: ${{ values.image }}
+  port: ${{ values.port }}
+  replicas: ${{ values.replicas }}
+{%- if values.autoscaling %}
+  autoscaling:
+    minReplicas: ${{ values.replicas }}
+    maxReplicas: ${{ values.maxReplicas }}
+{%- endif %}
+  public: ${{ values.public }}
+{%- if values.database != 'none' %}
+  database:
+    class: ${{ values.database }}
+{%- endif %}

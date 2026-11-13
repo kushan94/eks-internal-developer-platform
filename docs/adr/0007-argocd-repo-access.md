@@ -18,5 +18,5 @@ The repo is private, and Argo CD should be able to deploy from any approved repo
 ## Consequences
 - No personal tokens are involved, and the stored key never leaves AWS except into the cluster.
 - The GitHub App has to be created in the GitHub web interface, and its private key rotated there.
-- Argo CD and External Secrets aren't yet managed by Argo CD, so their upgrades go through the Makefile.
+- Argo CD and External Secrets aren't yet managed by Argo CD, so their upgrades go through the Makefile. ([ADR 0023](0023-self-managed-argocd.md) changes this.)
 - GitHub's repo-scanning generator could discover repos automatically, but as far as we know it scans organizations rather than personal accounts, so onboarding stays explicit through `apps/`.

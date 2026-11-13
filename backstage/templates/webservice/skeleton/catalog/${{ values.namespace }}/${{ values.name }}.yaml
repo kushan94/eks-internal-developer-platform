@@ -3,14 +3,33 @@ kind: Component
 metadata:
   name: ${{ values.namespace }}-${{ values.name }}
   title: ${{ values.name }}
+{%- if values.environments %}
+  description: WebService in dev, staging and prod (${{ values.namespace }}-<env> namespaces)
+{%- else %}
   description: WebService in the ${{ values.namespace }} namespace
+{%- endif %}
   annotations:
     github.com/project-slug: kushan94/eks-internal-developer-platform
+{%- if values.environments %}
+    argocd/app-selector: backstage.io/kubernetes-id=${{ values.namespace }}-${{ values.name }}
+{%- else %}
     argocd/app-name: workload-${{ values.namespace }}
+{%- endif %}
     platform.example.org/runtime: ${{ values.runtime }}
     backstage.io/kubernetes-id: ${{ values.namespace }}-${{ values.name }}
+{%- if not values.environments %}
     backstage.io/kubernetes-namespace: ${{ values.namespace }}
+{%- endif %}
   links:
+{%- if values.public and values.environments %}
+{%- for env in ['prod', 'staging', 'dev'] %}
+    - url: https://${{ values.name }}-${{ values.namespace }}-${{ env }}.idp.skyforgelab.cloud
+      title: Open ${{ env }}
+{%- endfor %}
+{%- elif values.public %}
+    - url: https://${{ values.name }}-${{ values.namespace }}.idp.skyforgelab.cloud
+      title: Open the app
+{%- endif %}
     - url: https://grafana.idp.skyforgelab.cloud/d/webservice/webservice?var-service=${{ values.namespace }}-${{ values.name }}
       title: Dashboard
       icon: dashboard

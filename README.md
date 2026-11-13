@@ -69,8 +69,38 @@ spec:
 The container gets `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD` and `PGSSLMODE`, and on Kubernetes also `DATABASE_URL`, so the app doesn't need to know which class it has.
 
 **Try it:**
-- **[visits](apps/visits/main.go)** is a small demo app in the `demo` namespace with a managed database. Each page view adds a row and shows the count, the database and the login. On EKS it's at `https://visits-demo.idp.skyforgelab.cloud`.
+- **[visits](apps/visits/main.go)** is a small demo app with a managed database, in dev, staging and prod. Each page view adds a row and shows the count, the database and the login. On EKS it's at `https://visits-demo-<env>.idp.skyforgelab.cloud`.
 - **`make test-db`** runs an end-to-end check against the current cluster, kind or EKS (`make test-db KUBE_CONTEXT=idp`). It creates services with both classes, logs in with each one's environment, checks that one service can't open another's database, deletes them, and confirms the shared server has nothing left. `kubectl get webservice` shows the class, and `status.database` names the host, database and Secret. Deleting the WebService deletes its database. See [ADR 0011](docs/adr/0011-databases.md).
+
+**Backups:** with the production profile, both RDS instances keep 7 days of automated backups, including point-in-time restore, and keep them after the nightly destroy. **`make rds-restore-drill KUBE_CONTEXT=idp-eks`** restores the shared server to a new instance and checks the data is there. See [ADR 0017](docs/adr/0017-rds-backups.md). In-cluster databases are backed up as EBS snapshots when they're created and every 6 hours, and **`make cnpg-restore-drill`** restores one into a new cluster. See [ADR 0018](docs/adr/0018-cloudnativepg-backups.md).
+
+## Autoscaling
+Instead of a fixed `replicas`, a Kubernetes service can scale on CPU:
+
+```yaml
+spec:
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilization: 70   # optional, % of the CPU request
+```
+
+The composition adds a HorizontalPodAutoscaler and leaves the replica count to it. In prod, `minReplicas` must be at least 2. See [ADR 0022](docs/adr/0022-autoscaling.md).
+
+## Environments
+A service can run in dev, staging and prod, each in its own namespace (`<team>-dev`, `<team>-staging`, `<team>-prod`) with its own database:
+
+```
+workloads/demo/visits/
+  base/            the WebService, without an image
+  envs/dev/        image and overrides  ->  demo-dev
+  envs/staging/    image and overrides  ->  demo-staging
+  envs/prod/       image and overrides  ->  demo-prod (at least 2 replicas)
+```
+
+New builds of visits go to dev automatically. To move a tested image on, run the **Promote** workflow (Actions → Promote, or `gh workflow run promote.yml -f service=demo/visits -f to=staging`). It opens a pull request that copies the exact image from dev to staging, or staging to prod. Merging it deploys. If the repo doesn't let Actions open pull requests, the run's summary has a one-click link instead.
+
+Backstage's Web Service template creates services with environments by default (**Run in dev, staging and prod**). `make test-template` renders it both ways and validates the result. One Backstage component, dashboard and set of alerts covers every environment, with an environment label to tell them apart. Services written as a single file in `workloads/<team>/` keep working as before. See [ADR 0021](docs/adr/0021-environments.md).
 
 ## Public URLs
 On EKS, add `public: true` to a Kubernetes-runtime WebService to serve it at `https://<name>-<namespace>.idp.skyforgelab.cloud`. Its URL appears in `kubectl get webservice` and in `status.url`. One shared ALB, created from a Gateway API Gateway, serves every public service, and ExternalDNS publishes the hostnames. See [ADR 0009](docs/adr/0009-public-urls.md).
@@ -95,8 +125,32 @@ Team namespaces, which Argo CD creates from `workloads/` and `apps/`, enforce:
 
 WebServices meet these by default. If an image names its user (such as `USER app`) instead of numbering it, set `runAsUser`. When a rule rejects a service, `kubectl get webservice` shows `SYNCED=False` and the condition says which rule and why. `make test` checks the policies against sample pods. See [ADR 0012](docs/adr/0012-guardrails.md).
 
-## Metrics, dashboards and alerts
-Every cluster runs metrics-server, Prometheus, Grafana and Alertmanager. If a service serves Prometheus metrics, say where:
+**Network isolation:** every service only accepts traffic from its own namespace, Prometheus, and the load balancer if it's public. Its in-cluster database also only accepts traffic from its namespace, the CloudNativePG operator and Prometheus. On EKS the VPC CNI enforces this. To let another team's services call yours, list them:
+
+```yaml
+spec:
+  allowFrom:
+    - team: shop            # every service of team shop
+    - team: billing
+      service: invoices     # only billing's invoices
+```
+
+Callers must be in the same environment, so dev can't call prod. See [ADR 0020](docs/adr/0020-network-policies.md).
+
+Outbound traffic is limited too: a service can reach DNS, its own namespace and its database. For anything else, say so:
+
+```yaml
+spec:
+  allowTo:                  # other teams' services it calls; they list it in allowFrom
+    - team: billing
+      service: invoices
+  allowInternet: true       # public internet, such as external APIs
+```
+
+See [ADR 0024](docs/adr/0024-egress-policies.md).
+
+## Metrics, logs, dashboards and alerts
+Every cluster runs metrics-server, Prometheus, Grafana and Alertmanager, and Loki and Alloy for logs. If a service serves Prometheus metrics, say where:
 
 ```yaml
 spec:
@@ -104,7 +158,7 @@ spec:
     path: /metrics   # and port, if it isn't the service's port
 ```
 
-The `WebService` dashboard shows any service's pods, CPU, memory, restarts and scrape health, including its in-cluster database. Each service's Backstage page links to it. On EKS, Grafana is at `https://grafana.idp.skyforgelab.cloud` with GitHub login, for the users listed in `grafanaAdmins` in [values.yaml](gitops/root/values.yaml). On kind, run `kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80`, and get the admin password from the `kube-prometheus-stack-grafana` secret. See [ADR 0013](docs/adr/0013-observability.md).
+The `WebService` dashboard shows any service's pods, CPU, memory, restarts, scrape health and logs, including its in-cluster database. Logs are kept for 7 days, in S3 on EKS, so they outlive the nightly destroy; see [ADR 0019](docs/adr/0019-logs.md). It also shows what the service costs per hour and per month, from OpenCost; see [ADR 0025](docs/adr/0025-cost-per-service.md). Each service's Backstage page links to it. On EKS, Grafana is at `https://grafana.idp.skyforgelab.cloud` with GitHub login, for the users listed in `grafanaAdmins` in [values.yaml](gitops/root/values.yaml). On kind, run `kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80`, and get the admin password from the `kube-prometheus-stack-grafana` secret. See [ADR 0013](docs/adr/0013-observability.md).
 
 One-time Grafana login setup for EKS:
 1. **Create a GitHub OAuth app:** GitHub → Settings → Developer settings → OAuth Apps → New. Use homepage `https://grafana.idp.skyforgelab.cloud` and callback `https://grafana.idp.skyforgelab.cloud/login/github`, then generate a client secret.
@@ -153,6 +207,8 @@ Argo CD reads **commits**, not your working tree, so uncommitted changes have no
 | Add a team or service | Use the Backstage template, or add a file under `workloads/<namespace>/` |
 | Change a platform API | Edit `platform/crossplane/webservice/` |
 | Add a platform component | Add an application to `gitops/root/templates/` |
+| Upgrade Argo CD or External Secrets | Change `argocd.chartVersion` or `externalSecrets.chartVersion` in `gitops/root/values.yaml`; Argo CD upgrades itself |
+| Promote a service | Run the Promote workflow, then merge its pull request |
 
 Locally, Argo CD reads this repo from a Git server on the kind network and follows the branch you have checked out. To use a hosted repo instead, run `make gitops REPO_URL=https://github.com/kushan94/eks-internal-developer-platform.git`.
 
@@ -178,7 +234,8 @@ colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
 - [ ] **8b. Traffic for ECS:** public URLs for the ECS runtime
 - [x] **9. Guardrails:** Pod Security Admission, Kyverno CEL policies and keyless image signing
 - [x] **10. Metrics:** metrics-server, Prometheus, Grafana with GitHub login, a dashboard per service linked from Backstage, and alerts to chat
-- [ ] **10b. Tracing, cost and scaling:** OpenTelemetry, OpenCost, Karpenter and KEDA
+- [ ] **10b. Tracing, cost and scaling:** OpenCost cost per service and CPU autoscaling are built; OpenTelemetry, Karpenter and KEDA remain
+- [ ] **12. Production hardening:** availability profile, backups and restore drills, logs, network isolation, environments and promotion, self-managed Argo CD *(built and tested offline and on kind; EKS verification pending)*
 - [ ] **11. Article:** publish the write-up
 
 ## Repo access and other repos
@@ -281,6 +338,8 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 | provider-sql | 0.16.2 |
 | CloudNativePG chart | 0.29.1 (operator 1.30.1) |
 | kube-prometheus-stack chart | 92.14.1 (Prometheus Operator 0.94.2) |
+| Loki chart / Alloy chart | 7.5.0 (Loki 3.6.16) / 1.15.0 (Alloy 1.21.3) |
+| OpenCost chart | 2.5.33 (OpenCost 1.121.3) |
 | metrics-server chart | 3.14.0 (metrics-server 0.9.0) |
 | Karpenter | 1.15.1 |
 
@@ -300,6 +359,15 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0013: Metrics with Prometheus, Grafana and one dashboard per service](docs/adr/0013-observability.md)
 - [ADR 0014: Alerts per service, sent to a chat webhook](docs/adr/0014-alerting.md)
 - [ADR 0016: A production profile for availability, and spread for every service](docs/adr/0016-availability-profile.md)
+- [ADR 0017: RDS backups that survive the nightly destroy, and a restore drill](docs/adr/0017-rds-backups.md)
+- [ADR 0018: Back up in-cluster databases as EBS snapshots](docs/adr/0018-cloudnativepg-backups.md)
+- [ADR 0019: Logs for every service with Loki and Alloy](docs/adr/0019-logs.md)
+- [ADR 0020: Isolate every service's inbound traffic with NetworkPolicies](docs/adr/0020-network-policies.md)
+- [ADR 0021: Environments as namespaces, promoted through Git](docs/adr/0021-environments.md)
+- [ADR 0022: Autoscale services on CPU with a HorizontalPodAutoscaler](docs/adr/0022-autoscaling.md)
+- [ADR 0023: Argo CD manages itself and External Secrets after bootstrap](docs/adr/0023-self-managed-argocd.md)
+- [ADR 0024: Limit where services can connect](docs/adr/0024-egress-policies.md)
+- [ADR 0025: Cost per service with OpenCost](docs/adr/0025-cost-per-service.md)
 
 ## License
 [MIT](LICENSE)

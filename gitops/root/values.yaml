@@ -2,6 +2,13 @@ repoURL: ""
 targetRevision: HEAD
 crossplaneChartVersion: 2.4.3
 
+# Installed first by the Cluster workflow (make platform-bootstrap), then kept
+# up to date by Argo CD. The Makefile reads these versions from here.
+argocd:
+  chartVersion: 10.11.6
+externalSecrets:
+  chartVersion: 2.14.0
+
 aws:
   # Installs the Crossplane AWS providers. Needs AWS credentials, so it is off for local clusters.
   enabled: false

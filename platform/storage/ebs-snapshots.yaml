@@ -1,0 +1,13 @@
+# EBS snapshots for CloudNativePG backups of in-cluster databases. The
+# snapshot-controller add-on provides the VolumeSnapshot API. The tag lets
+# the destroy cleanup find these snapshots, which outlive the cluster on
+# purpose, and delete them once they're older than the backup retention.
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: ebs-snapshots
+driver: ebs.csi.aws.com
+# Deleting a Backup, or the WebService that owns it, deletes its snapshot.
+deletionPolicy: Delete
+parameters:
+  tagSpecification_1: "idp/backup=cloudnative-pg"

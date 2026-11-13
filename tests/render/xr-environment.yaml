@@ -1,19 +1,17 @@
+# A service with environments: its kustomization labels the WebService with
+# the shared Backstage ID and the environment.
 apiVersion: platform.example.org/v1alpha1
 kind: WebService
 metadata:
   name: visits
+  namespace: demo-prod
   labels:
     backstage.io/kubernetes-id: demo-visits
+    platform.example.org/environment: prod
 spec:
   runtime: kubernetes
-  public: true
-  # Counts page views in Postgres. Built from apps/visits; the image
-  # workflow sets the tag after each build.
   image: ghcr.io/kushan94/idp-visits:abfad8f78730c500a740b68069fd7ae1cd3d083d
   port: 8080
   replicas: 2
-  # Page views and database query time, on the service's Grafana dashboard.
-  metrics:
-    path: /metrics
   database:
     class: managed

@@ -1,3 +1,5 @@
+# What every environment shares. Each envs/<env> folder adds the image and
+# its own settings, and deploys to the ${{ values.namespace }}-<env> namespace.
 apiVersion: platform.example.org/v1alpha1
 kind: WebService
 metadata:
@@ -6,10 +8,13 @@ metadata:
     backstage.io/kubernetes-id: ${{ values.namespace }}-${{ values.name }}
 spec:
   runtime: ${{ values.runtime }}
-  image: ${{ values.image }}
   port: ${{ values.port }}
-  replicas: ${{ values.replicas }}
   public: ${{ values.public }}
+{%- if values.autoscaling %}
+  # Each environment sets its own minimum.
+  autoscaling:
+    maxReplicas: ${{ values.maxReplicas }}
+{%- endif %}
 {%- if values.database != 'none' %}
   database:
     class: ${{ values.database }}

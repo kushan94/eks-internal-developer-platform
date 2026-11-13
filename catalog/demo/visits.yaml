@@ -7,13 +7,18 @@ metadata:
   annotations:
     github.com/project-slug: kushan94/eks-internal-developer-platform
     backstage.io/source-location: url:https://github.com/kushan94/eks-internal-developer-platform/tree/main/apps/visits
-    argocd/app-name: workload-demo
+    # One Argo CD app per environment, labelled with the service's ID.
+    argocd/app-selector: backstage.io/kubernetes-id=demo-visits
     platform.example.org/runtime: kubernetes
+    # Matches the pods of every environment, in demo-dev, demo-staging and demo-prod.
     backstage.io/kubernetes-id: demo-visits
-    backstage.io/kubernetes-namespace: demo
   links:
-    - url: https://visits-demo.idp.skyforgelab.cloud
-      title: Open the app
+    - url: https://visits-demo-prod.idp.skyforgelab.cloud
+      title: Open prod
+    - url: https://visits-demo-staging.idp.skyforgelab.cloud
+      title: Open staging
+    - url: https://visits-demo-dev.idp.skyforgelab.cloud
+      title: Open dev
     - url: https://grafana.idp.skyforgelab.cloud/d/webservice/webservice?var-service=demo-visits
       title: Dashboard
       icon: dashboard

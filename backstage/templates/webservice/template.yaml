@@ -13,7 +13,8 @@ spec:
 
   parameters:
     - title: Service details
-      # In-cluster databases run next to Kubernetes pods, so ECS services can't use them.
+      # In-cluster databases run next to Kubernetes pods, and autoscaling is
+      # Kubernetes-only for now, so ECS services can't use either.
       if:
         properties:
           runtime:
@@ -23,6 +24,8 @@ spec:
           database:
             not:
               const: in-cluster
+          autoscaling:
+            const: false
       required:
         - name
         - namespace
@@ -78,9 +81,23 @@ spec:
         replicas:
           title: Replicas
           type: integer
+          description: With autoscaling, the minimum.
           default: 2
           minimum: 1
           maximum: 10
+        autoscaling:
+          title: Autoscale on CPU
+          type: boolean
+          default: false
+          description: Add replicas when average CPU use passes 70% of the request, up to the maximum below. Kubernetes runtime only.
+        environments:
+          title: Run in dev, staging and prod
+          type: boolean
+          default: true
+          description: >-
+            Separate dev, staging and prod namespaces, each with its own database.
+            You deploy to dev first and promote the same image onward with the
+            Promote workflow. Prod runs at least 2 replicas.
         public:
           title: Public URL
           type: boolean
@@ -100,10 +117,27 @@ spec:
               title: Managed (shared RDS, works with both runtimes)
             - const: in-cluster
               title: In-cluster (CloudNativePG, Kubernetes runtime only)
+      # The maximum only appears when autoscaling is on.
+      dependencies:
+        autoscaling:
+          oneOf:
+            - properties:
+                autoscaling:
+                  const: false
+            - properties:
+                autoscaling:
+                  const: true
+                maxReplicas:
+                  title: Maximum replicas
+                  type: integer
+                  default: 6
+                  minimum: 2
+                  maximum: 50
+              required: [maxReplicas]
 
   steps:
     - id: render
-      name: Render manifests
+      name: Render the catalog entry
       action: fetch:template
       input:
         url: ./skeleton
@@ -115,6 +149,45 @@ spec:
           image: ${{ parameters.image }}
           port: ${{ parameters.port }}
           replicas: ${{ parameters.replicas }}
+          autoscaling: ${{ parameters.autoscaling }}
+          maxReplicas: ${{ parameters.maxReplicas }}
+          public: ${{ parameters.public }}
+          database: ${{ parameters.database }}
+          environments: ${{ parameters.environments }}
+
+    - id: render-workload
+      name: Render the service
+      if: ${{ not parameters.environments }}
+      action: fetch:template
+      input:
+        url: ./skeleton-single
+        values:
+          name: ${{ parameters.name }}
+          namespace: ${{ parameters.namespace }}
+          runtime: ${{ parameters.runtime }}
+          image: ${{ parameters.image }}
+          port: ${{ parameters.port }}
+          replicas: ${{ parameters.replicas }}
+          autoscaling: ${{ parameters.autoscaling }}
+          maxReplicas: ${{ parameters.maxReplicas }}
+          public: ${{ parameters.public }}
+          database: ${{ parameters.database }}
+
+    - id: render-environments
+      name: Render dev, staging and prod
+      if: ${{ parameters.environments }}
+      action: fetch:template
+      input:
+        url: ./skeleton-envs
+        values:
+          name: ${{ parameters.name }}
+          namespace: ${{ parameters.namespace }}
+          runtime: ${{ parameters.runtime }}
+          image: ${{ parameters.image }}
+          port: ${{ parameters.port }}
+          replicas: ${{ parameters.replicas }}
+          autoscaling: ${{ parameters.autoscaling }}
+          maxReplicas: ${{ parameters.maxReplicas }}
           public: ${{ parameters.public }}
           database: ${{ parameters.database }}
 
@@ -126,7 +199,8 @@ spec:
         branchName: webservice-${{ parameters.namespace }}-${{ parameters.name }}
         title: Add WebService ${{ parameters.namespace }}/${{ parameters.name }}
         description: |
-          Adds the `${{ parameters.name }}` WebService to the `${{ parameters.namespace }}` namespace, running on `${{ parameters.runtime }}`, with database: `${{ parameters.database }}`.
+          Adds the `${{ parameters.name }}` WebService, running on `${{ parameters.runtime }}`, with database: `${{ parameters.database }}`.
+          {%- if parameters.environments %} It runs in dev, staging and prod, in the `${{ parameters.namespace }}-dev`, `-staging` and `-prod` namespaces. New images go to dev; the Promote workflow moves them on.{%- else %} It runs in the `${{ parameters.namespace }}` namespace.{%- endif %}
 
           Created from the Backstage Web Service template. Argo CD deploys it after this pull request is merged.
 

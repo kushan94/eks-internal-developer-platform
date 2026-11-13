@@ -46,6 +46,74 @@ spec:
                   type: integer
                   minimum: 1
                   default: 2
+                  description: Number of copies to run. Ignored when autoscaling is set.
+                allowFrom:
+                  type: array
+                  maxItems: 20
+                  description: >-
+                    Other teams' services that may call this one, on its port. By
+                    default only its own namespace can. With environments, callers
+                    must be in the same environment. Kubernetes runtime only.
+                  items:
+                    type: object
+                    required: [team]
+                    properties:
+                      team:
+                        type: string
+                        pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+                        description: The calling team, as named in workloads/<team>.
+                      service:
+                        type: string
+                        pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+                        description: One of the team's services. Leave out to allow all of them.
+                allowTo:
+                  type: array
+                  maxItems: 20
+                  description: >-
+                    Other teams' services this one calls, on any port. They must also
+                    list it in their allowFrom. By default a service can only reach DNS,
+                    its own namespace and its database. With environments, only the
+                    same environment. Kubernetes runtime only.
+                  items:
+                    type: object
+                    required: [team]
+                    properties:
+                      team:
+                        type: string
+                        pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+                      service:
+                        type: string
+                        pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+                        description: One of the team's services. Leave out to allow all of them.
+                allowInternet:
+                  type: boolean
+                  default: false
+                  description: >-
+                    Let the service connect to the public internet, such as external
+                    APIs. Private address ranges stay blocked. Kubernetes runtime only.
+                autoscaling:
+                  type: object
+                  description: >-
+                    Scale between minReplicas and maxReplicas on CPU use, instead of
+                    running a fixed number of replicas. Kubernetes runtime only.
+                  required: [minReplicas, maxReplicas]
+                  x-kubernetes-validations:
+                    - rule: self.maxReplicas >= self.minReplicas
+                      message: maxReplicas must be at least minReplicas
+                  properties:
+                    minReplicas:
+                      type: integer
+                      minimum: 1
+                    maxReplicas:
+                      type: integer
+                      minimum: 1
+                      maximum: 50
+                    targetCPUUtilization:
+                      type: integer
+                      minimum: 10
+                      maximum: 100
+                      default: 70
+                      description: Average CPU use, as a percentage of each pod's CPU request, to aim for.
                 public:
                   type: boolean
                   default: false

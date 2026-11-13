@@ -1,0 +1,3 @@
+{"name": "shop", "namespace": "team-b", "runtime": "kubernetes", "owner": "group:default/platform-team",
+ "image": "nginxinc/nginx-unprivileged:1.29-alpine", "port": 8080, "replicas": 2, "public": false,
+ "database": "none", "environments": false}

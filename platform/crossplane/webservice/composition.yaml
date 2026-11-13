@@ -47,7 +47,11 @@ spec:
             {{- /* The production profile on EKS sets this in the aws-platform EnvironmentConfig. */}}
             {{- $ha := dig "highAvailability" false $env }}
             {{- /* Lets Backstage's Kubernetes plugin find everything this WebService creates. */}}
-            {{- $backstageId := printf "%s-%s" $ns $name }}
+            {{- /* A service in several environments shares one ID, set as a label on its
+                   WebService; otherwise it's <namespace>-<name>. */}}
+            {{- $backstageId := dig "metadata" "labels" "backstage.io/kubernetes-id" (printf "%s-%s" $ns $name) $xr }}
+            {{- /* dev, staging or prod for services with environments, set by their kustomization. */}}
+            {{- $environment := dig "metadata" "labels" "platform.example.org/environment" "" $xr }}
             {{- $url := "" }}
             {{- /* Metrics come from the app's own port unless metrics.port names another. */}}
             {{- $metricsPortName := "" }}
@@ -71,12 +75,19 @@ spec:
             {{- range $key := list "providerConfigName" "host" "port" "adminRole" }}
             {{- if not (hasKey $pg $key) }}{{ fail (printf "managed databases need managedPostgres.%s in the managed-postgres or aws-platform EnvironmentConfig" $key) }}{{ end }}
             {{- end }}
-            {{- /* One database and login per service on the shared server, named after its namespace. */}}
-            {{- $dbName = $backstageId }}
+            {{- /* One database and login per service and environment on the shared server. */}}
+            {{- $dbName = printf "%s-%s" $ns $name }}
             {{- if gt (len $dbName) 63 }}{{ fail (printf "the database name %s is longer than Postgres' 63 characters; shorten the namespace or name" $dbName) }}{{ end }}
             {{- $dbSecret = printf "%s-db" $name }}
             {{- $dbHost = $pg.host }}
             {{- end }}
+            {{- /* With autoscaling, the HorizontalPodAutoscaler owns the replica count and the
+                   service counts as ready once it has its minimum. */}}
+            {{- $autoscaling := $xr.spec.autoscaling }}
+            {{- if and $autoscaling (ne $runtime "kubernetes") }}{{ fail "autoscaling is only available for the kubernetes runtime for now" }}{{ end }}
+            {{- if and (or $xr.spec.allowFrom $xr.spec.allowTo $xr.spec.allowInternet) (ne $runtime "kubernetes") }}{{ fail "allowFrom, allowTo and allowInternet are only available for the kubernetes runtime; ECS services use their security group" }}{{ end }}
+            {{- $minReplicas := $xr.spec.replicas }}
+            {{- with $autoscaling }}{{ $minReplicas = .minReplicas }}{{ end }}
             {{- if eq $runtime "kubernetes" }}
             {{- $available := dig "deployment" "resource" "status" "availableReplicas" 0 (default dict .observed.resources) }}
             apiVersion: apps/v1
@@ -87,9 +98,11 @@ spec:
                 backstage.io/kubernetes-id: {{ $backstageId }}
               annotations:
                 gotemplating.fn.crossplane.io/composition-resource-name: deployment
-                gotemplating.fn.crossplane.io/ready: {{ if ge (int $available) (int $xr.spec.replicas) }}"True"{{ else }}"False"{{ end }}
+                gotemplating.fn.crossplane.io/ready: {{ if ge (int $available) (int $minReplicas) }}"True"{{ else }}"False"{{ end }}
             spec:
+              {{- if not $autoscaling }}
               replicas: {{ $xr.spec.replicas }}
+              {{- end }}
               selector:
                 matchLabels:
                   app.kubernetes.io/name: {{ $name }}
@@ -98,6 +111,9 @@ spec:
                   labels:
                     app.kubernetes.io/name: {{ $name }}
                     backstage.io/kubernetes-id: {{ $backstageId }}
+                    {{- with $environment }}
+                    platform.example.org/environment: {{ . }}
+                    {{- end }}
                 spec:
                   # Spread replicas across zones, then nodes, so one failure never takes
                   # them all. Soft, so a single-zone cluster such as kind still schedules them.
@@ -180,7 +196,7 @@ spec:
               ports:
                 - port: 80
                   targetPort: {{ $xr.spec.port }}
-            {{- if gt (int $xr.spec.replicas) 1 }}
+            {{- if gt (int $minReplicas) 1 }}
             ---
             # Node drains and upgrades take at most one replica down at a time.
             apiVersion: policy/v1
@@ -198,6 +214,137 @@ spec:
                 matchLabels:
                   app.kubernetes.io/name: {{ $name }}
             {{- end }}
+            {{- with $autoscaling }}
+            ---
+            # Scales the Deployment on CPU use. Needs metrics-server, which every
+            # cluster runs, and the CPU request set on the container above.
+            apiVersion: autoscaling/v2
+            kind: HorizontalPodAutoscaler
+            metadata:
+              name: {{ $name }}
+              labels:
+                backstage.io/kubernetes-id: {{ $backstageId }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: autoscaler
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              scaleTargetRef:
+                apiVersion: apps/v1
+                kind: Deployment
+                name: {{ $name }}
+              minReplicas: {{ .minReplicas }}
+              maxReplicas: {{ .maxReplicas }}
+              metrics:
+                - type: Resource
+                  resource:
+                    name: cpu
+                    target:
+                      type: Utilization
+                      averageUtilization: {{ default 70 .targetCPUUtilization }}
+            {{- end }}
+            {{- $publicCidrs := dig "aws" "publicSubnetCidrs" list $env }}
+            ---
+            # Inbound: only the service's own namespace, Prometheus, the load balancer
+            # for public services, and what allowFrom lists. Outbound: only DNS, its own
+            # namespace, its managed database, and what allowTo and allowInternet allow.
+            apiVersion: networking.k8s.io/v1
+            kind: NetworkPolicy
+            metadata:
+              name: {{ $name }}
+              labels:
+                backstage.io/kubernetes-id: {{ $backstageId }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: network-policy
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              podSelector:
+                matchLabels:
+                  app.kubernetes.io/name: {{ $name }}
+              policyTypes: [Ingress, Egress]
+              ingress:
+                - from:
+                    - podSelector: {}
+                    - namespaceSelector:
+                        matchLabels:
+                          kubernetes.io/metadata.name: monitoring
+                {{- if and $xr.spec.public $publicCidrs }}
+                # The ALB sends traffic straight to pod IPs from the public subnets.
+                - from:
+                    {{- range $publicCidrs }}
+                    - ipBlock:
+                        cidr: {{ . }}
+                    {{- end }}
+                  ports:
+                    - port: {{ $xr.spec.port }}
+                {{- end }}
+                {{- range $xr.spec.allowFrom }}
+                # Allowed by allowFrom. Teams can't set namespace labels, and the
+                # composition sets each pod's name label, so neither can be faked.
+                - from:
+                    - namespaceSelector:
+                        matchLabels:
+                          platform.example.org/team: {{ .team }}
+                          {{- with $environment }}
+                          platform.example.org/environment: {{ . }}
+                          {{- end }}
+                      {{- with .service }}
+                      podSelector:
+                        matchLabels:
+                          app.kubernetes.io/name: {{ . }}
+                      {{- end }}
+                  ports:
+                    - port: {{ $xr.spec.port }}
+                {{- end }}
+              egress:
+                - to:
+                    - namespaceSelector:
+                        matchLabels:
+                          kubernetes.io/metadata.name: kube-system
+                      podSelector:
+                        matchLabels:
+                          k8s-app: kube-dns
+                  ports:
+                    - {port: 53, protocol: UDP}
+                    - {port: 53, protocol: TCP}
+                - to:
+                    - podSelector: {}
+                {{- if eq $dbClass "managed" }}
+                - to:
+                    {{- if $pg.namespace }}
+                    - namespaceSelector:
+                        matchLabels:
+                          kubernetes.io/metadata.name: {{ $pg.namespace }}
+                    {{- else if dig "aws" "vpcCidr" "" $env }}
+                    # RDS, somewhere in the VPC.
+                    - ipBlock:
+                        cidr: {{ $env.aws.vpcCidr }}
+                    {{- else }}
+                    {{- fail "managed databases need managedPostgres.namespace or aws.vpcCidr, so the service's network policy can let it reach the server" }}
+                    {{- end }}
+                  ports:
+                    - port: {{ $pg.port }}
+                {{- end }}
+                {{- range $xr.spec.allowTo }}
+                - to:
+                    - namespaceSelector:
+                        matchLabels:
+                          platform.example.org/team: {{ .team }}
+                          {{- with $environment }}
+                          platform.example.org/environment: {{ . }}
+                          {{- end }}
+                      {{- with .service }}
+                      podSelector:
+                        matchLabels:
+                          app.kubernetes.io/name: {{ . }}
+                      {{- end }}
+                {{- end }}
+                {{- if $xr.spec.allowInternet }}
+                # Anywhere public; the cluster's, the VPC's and other private ranges stay blocked.
+                - to:
+                    - ipBlock:
+                        cidr: 0.0.0.0/0
+                        except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16]
+                {{- end }}
             {{- if $metricsPortName }}
             ---
             # Prometheus finds monitors in every namespace.
@@ -421,11 +568,20 @@ spec:
               {{- if $ha }}
               affinity:
                 topologyKey: topology.kubernetes.io/zone
+              # Backups as EBS snapshots, taken by the ScheduledBackup below.
+              # Deleting a backup deletes its snapshot.
+              backup:
+                volumeSnapshot:
+                  className: ebs-snapshots
+                  snapshotOwnerReference: backup
               {{- end }}
               # Shows the database pods on the service's Kubernetes tab in Backstage.
               inheritedMetadata:
                 labels:
                   backstage.io/kubernetes-id: {{ $backstageId }}
+                  {{- with $environment }}
+                  platform.example.org/environment: {{ . }}
+                  {{- end }}
               storage:
                 size: 1Gi
               resources:
@@ -434,6 +590,52 @@ spec:
                   memory: 256Mi
                 limits:
                   memory: 512Mi
+            ---
+            # The database accepts connections from its own namespace, the
+            # CloudNativePG operator and Prometheus.
+            apiVersion: networking.k8s.io/v1
+            kind: NetworkPolicy
+            metadata:
+              name: {{ $name }}-db
+              labels:
+                backstage.io/kubernetes-id: {{ $backstageId }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: database-network-policy
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              podSelector:
+                matchLabels:
+                  cnpg.io/cluster: {{ $name }}-db
+              policyTypes: [Ingress]
+              ingress:
+                - from:
+                    - podSelector: {}
+                    - namespaceSelector:
+                        matchLabels:
+                          kubernetes.io/metadata.name: cnpg-system
+                    - namespaceSelector:
+                        matchLabels:
+                          kubernetes.io/metadata.name: monitoring
+            {{- if $ha }}
+            ---
+            # A backup when the database is created, then every 6 hours. The backups
+            # belong to the database, so deleting the WebService deletes them too.
+            apiVersion: postgresql.cnpg.io/v1
+            kind: ScheduledBackup
+            metadata:
+              name: {{ $name }}-db
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: database-backups
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              cluster:
+                name: {{ $name }}-db
+              method: volumeSnapshot
+              # CloudNativePG's schedule has a seconds field.
+              schedule: "0 0 */6 * * *"
+              immediate: true
+              backupOwnerReference: cluster
+            {{- end }}
             {{- else if eq $dbClass "managed" }}
             {{- $providerConfigRef := dict "kind" "ClusterProviderConfig" "name" $pg.providerConfigName }}
             ---

@@ -34,6 +34,7 @@ spec:
         managedNamespaceMetadata:
           labels:
             platform.example.org/workload: "true"
+            platform.example.org/team: '{{ "{{ .namespace }}" }}'
             pod-security.kubernetes.io/enforce: restricted
             pod-security.kubernetes.io/enforce-version: latest
         automated:

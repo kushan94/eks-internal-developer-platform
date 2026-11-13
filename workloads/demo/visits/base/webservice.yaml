@@ -1,0 +1,18 @@
+# What every environment of visits shares. Each envs/<env> folder adds the
+# image and its own settings, and deploys to the demo-<env> namespace.
+apiVersion: platform.example.org/v1alpha1
+kind: WebService
+metadata:
+  name: visits
+  labels:
+    # One Backstage component for all environments.
+    backstage.io/kubernetes-id: demo-visits
+spec:
+  runtime: kubernetes
+  public: true
+  port: 8080
+  # Page views and database query time, on the service's Grafana dashboard.
+  metrics:
+    path: /metrics
+  database:
+    class: managed

@@ -1,0 +1,71 @@
+# The components the Cluster workflow installs before Argo CD can read Git:
+# Argo CD itself, and External Secrets, which gives it the GitHub App
+# credentials. After that first install, Argo CD keeps them in line with Git,
+# so upgrading them is a change to values.yaml.
+#
+# They use the default project, like the root application, because they live
+# in namespaces the platform project doesn't allow.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd
+  namespace: argocd
+  annotations:
+    # Some fields are filled in at runtime, such as the server's secret key and
+    # Backstage's token, and the CRDs are too large for client-side apply.
+    argocd.argoproj.io/compare-options: ServerSideDiff=true
+  # No resources finalizer: deleting this app must never uninstall Argo CD.
+spec:
+  project: default
+  sources:
+    - repoURL: https://argoproj.github.io/argo-helm
+      chart: argo-cd
+      targetRevision: {{ .Values.argocd.chartVersion }}
+      helm:
+        # The release `make argocd` installed, so Argo CD adopts it.
+        releaseName: argocd
+        # The same values file the bootstrap uses, so the two can't drift apart.
+        valueFiles:
+          - $repo/platform/bootstrap/argocd-values.yaml
+    - repoURL: {{ .Values.repoURL }}
+      targetRevision: {{ .Values.targetRevision }}
+      ref: repo
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      # Never prune: a bad render must not make Argo CD delete its own parts.
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+{{- if .Values.aws.enabled }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: external-secrets
+  namespace: argocd
+  annotations:
+    # The chart's webhook certificates are filled in at runtime.
+    argocd.argoproj.io/compare-options: ServerSideDiff=true
+spec:
+  project: default
+  source:
+    repoURL: https://charts.external-secrets.io
+    chart: external-secrets
+    targetRevision: {{ .Values.externalSecrets.chartVersion }}
+    helm:
+      releaseName: external-secrets
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: external-secrets
+  syncPolicy:
+    automated:
+      # Removing it would cut Argo CD off from its GitHub credentials.
+      prune: false
+      selfHeal: true
+    syncOptions:
+      - ServerSideApply=true
+{{- end }}

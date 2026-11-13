@@ -1,4 +1,5 @@
-# Argo CD settings that `make argocd` installs with.
+# Argo CD settings. `make argocd` installs with them, and the root application's
+# argocd app keeps Argo CD in line with them afterwards.
 configs:
   cm:
     # A read-only account that Backstage uses to show sync and health status.

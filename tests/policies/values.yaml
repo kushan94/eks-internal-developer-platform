@@ -6,3 +6,11 @@ namespaceSelector:
   - name: team-a
     labels:
       platform.example.org/workload: "true"
+  - name: demo-prod
+    labels:
+      platform.example.org/workload: "true"
+      platform.example.org/environment: prod
+  - name: demo-dev
+    labels:
+      platform.example.org/workload: "true"
+      platform.example.org/environment: dev

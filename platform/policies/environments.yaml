@@ -1,0 +1,37 @@
+# Rules for services' environments. Argo CD labels each environment's
+# namespace platform.example.org/environment when it creates it.
+apiVersion: policies.kyverno.io/v1
+kind: ValidatingPolicy
+metadata:
+  name: prod-replicas
+  annotations:
+    policies.kyverno.io/description: >-
+      A service in prod runs at least two replicas, so a node drain or a lost
+      zone never takes it down.
+spec:
+  validationActions: [Deny]
+  # Checked when the WebService is applied; nothing to scan in the background.
+  evaluation:
+    background:
+      enabled: false
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        platform.example.org/environment: prod
+    resourceRules:
+      - apiGroups: [platform.example.org]
+        apiVersions: [v1alpha1]
+        operations: [CREATE, UPDATE]
+        resources: [webservices]
+  # With autoscaling, the minimum is what counts; replicas is ignored then.
+  variables:
+    - name: minimum
+      expression: >-
+        has(object.spec.autoscaling) ? object.spec.autoscaling.minReplicas :
+        (has(object.spec.replicas) ? object.spec.replicas : 0)
+  validations:
+    - expression: variables.minimum >= 2
+      messageExpression: >-
+        'services in prod need at least 2 replicas; ' + object.metadata.name + ' asks for ' +
+        (variables.minimum == 0 ? 'the default' :
+         string(variables.minimum) + (has(object.spec.autoscaling) ? ' (autoscaling minReplicas)' : ''))
