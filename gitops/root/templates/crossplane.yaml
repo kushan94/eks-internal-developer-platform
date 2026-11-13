@@ -9,6 +9,14 @@ spec:
     repoURL: https://charts.crossplane.io/stable
     chart: crossplane
     targetRevision: {{ .Values.crossplaneChartVersion }}
+    {{- if .Values.highAvailability }}
+    helm:
+      valuesObject:
+        # A standby that takes over through leader election.
+        replicas: 2
+        rbacManager:
+          replicas: 2
+    {{- end }}
   destination:
     server: https://kubernetes.default.svc
     namespace: crossplane-system

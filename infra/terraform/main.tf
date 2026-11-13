@@ -3,7 +3,8 @@ data "aws_availability_zones" "available" {
 }
 
 locals {
-  azs = slice(data.aws_availability_zones.available.names, 0, 2)
+  high_availability = var.profile == "production"
+  azs               = slice(data.aws_availability_zones.available.names, 0, local.high_availability ? 3 : 2)
 }
 
 module "vpc" {
@@ -13,13 +14,16 @@ module "vpc" {
   name = var.cluster_name
   cidr = "10.42.0.0/16"
 
+  # A /20 per AZ: private from 10.42.0.0, public from 10.42.128.0.
   azs             = local.azs
-  private_subnets = ["10.42.0.0/20", "10.42.16.0/20"]
-  public_subnets  = ["10.42.128.0/20", "10.42.144.0/20"]
+  private_subnets = [for i, _ in local.azs : cidrsubnet("10.42.0.0/16", 4, i)]
+  public_subnets  = [for i, _ in local.azs : cidrsubnet("10.42.0.0/16", 4, i + 8)]
 
-  # One NAT gateway keeps this cheap, but is not highly available.
-  enable_nat_gateway = true
-  single_nat_gateway = true
+  # The study profile shares one NAT gateway, so losing its AZ cuts every
+  # private subnet off from the internet. Production has one per AZ.
+  enable_nat_gateway     = true
+  single_nat_gateway     = !local.high_availability
+  one_nat_gateway_per_az = local.high_availability
 
   public_subnet_tags = {
     "kubernetes.io/role/elb" = 1
@@ -118,9 +122,10 @@ module "eks" {
       capacity_type  = "ON_DEMAND"
       instance_types = ["m7i-flex.large"]
 
-      min_size     = 2
-      max_size     = 3
-      desired_size = 2
+      # Production keeps a node in each of its three AZs.
+      min_size     = local.high_availability ? 3 : 2
+      max_size     = local.high_availability ? 6 : 3
+      desired_size = local.high_availability ? 3 : 2
     }
   }
 }

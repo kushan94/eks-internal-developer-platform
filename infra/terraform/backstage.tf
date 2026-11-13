@@ -49,7 +49,8 @@ resource "aws_db_instance" "backstage" {
   db_subnet_group_name   = aws_db_subnet_group.backstage[0].name
   vpc_security_group_ids = [aws_security_group.backstage_db[0].id]
   publicly_accessible    = false
-  multi_az               = false
+  # A standby in another AZ that RDS fails over to, in the production profile.
+  multi_az = local.high_availability
 
   # Throwaway data: no snapshots or backups, and nothing blocks deletion.
   backup_retention_period = 0

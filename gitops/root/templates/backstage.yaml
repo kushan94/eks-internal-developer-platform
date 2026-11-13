@@ -16,6 +16,7 @@ spec:
     helm:
       valuesObject:
         backstage:
+          replicas: {{ ternary 2 1 .Values.highAvailability }}
           image:
             registry: {{ required "awsAccountId is required for Backstage" .Values.awsAccountId }}.dkr.ecr.{{ .Values.region }}.amazonaws.com
             repository: idp/backstage

@@ -16,6 +16,8 @@ export DOCKER_HOST ?= $(shell docker context inspect --format '{{.Endpoints.dock
 AWS_ENABLED ?= false
 # Only needed on EKS, where Backstage pulls its image from ECR.
 AWS_ACCOUNT_ID ?= $(if $(filter true,$(AWS_ENABLED)),$(shell aws sts get-caller-identity --query Account --output text 2>/dev/null))
+# The production profile's extra replicas. The Cluster workflow reads it from Terraform.
+HIGH_AVAILABILITY ?= false
 TF_IMAGE ?= hashicorp/terraform:latest
 TF_STATE_BUCKET ?= $(shell terraform -chdir=infra/bootstrap output -raw state_bucket 2>/dev/null)
 KYVERNO_CLI_IMAGE ?= ghcr.io/kyverno/kyverno-cli:v1.19.2
@@ -61,7 +63,7 @@ local-git: ## Serve this repo's commits to Argo CD over the kind network
 		echo "Git server did not start:"; docker logs $(GIT_CONTAINER); exit 1
 
 gitops: ## Apply the root application
-	sed -e 's|REPO_URL|$(REPO_URL)|' -e 's|AWS_ENABLED|$(AWS_ENABLED)|' -e 's|AWS_ACCOUNT_ID|$(AWS_ACCOUNT_ID)|' gitops/root-app.yaml | $(KUBECTL) apply -f -
+	sed -e 's|REPO_URL|$(REPO_URL)|' -e 's|AWS_ENABLED|$(AWS_ENABLED)|' -e 's|AWS_ACCOUNT_ID|$(AWS_ACCOUNT_ID)|' -e 's|HIGH_AVAILABILITY|$(HIGH_AVAILABILITY)|' gitops/root-app.yaml | $(KUBECTL) apply -f -
 
 demo: ## Wait for Argo CD to deliver the example WebService
 	for i in $$(seq 1 60); do $(KUBECTL) -n demo get webservice hello >/dev/null 2>&1 && break; sleep 5; done
@@ -87,7 +89,7 @@ aws-environment: ## Apply the aws-platform EnvironmentConfig from Terraform outp
 	$(KUBECTL) wait crd environmentconfigs.apiextensions.crossplane.io --for=condition=Established --timeout=60s
 	terraform -chdir=infra/terraform output -raw aws_platform_environment | $(KUBECTL) apply -f -
 
-test: ## Render the WebService composition for each runtime and database class, validate it, test the Kyverno policies and the alert rules
+test: ## Render the WebService composition for each runtime, database class and profile, validate it, test the Kyverno policies and the alert rules
 	@rm -rf .test && mkdir -p .test/schemas
 	cp platform/crossplane/aws/providers.yaml platform/crossplane/webservice/definition.yaml .test/schemas/
 	$(CROSSPLANE) render --include-full-xr tests/render/xr-kubernetes.yaml \
@@ -100,6 +102,9 @@ test: ## Render the WebService composition for each runtime and database class, 
 		--extra-resources platform/crossplane/webservice/environment.yaml > .test/public.yaml
 	$(CROSSPLANE) render --include-full-xr tests/render/xr-db-in-cluster.yaml \
 		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml > .test/db-in-cluster.yaml
+	$(CROSSPLANE) render --include-full-xr tests/render/xr-db-in-cluster.yaml \
+		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml \
+		--extra-resources tests/render/environment-ha.yaml > .test/db-in-cluster-ha.yaml
 	$(CROSSPLANE) render --include-full-xr tests/render/xr-db-managed.yaml \
 		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml \
 		--extra-resources platform/managed-postgres/local/shared-postgres.yaml > .test/db-managed.yaml
@@ -118,8 +123,12 @@ test: ## Render the WebService composition for each runtime and database class, 
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/ecs.yaml
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/public.yaml
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/db-in-cluster.yaml
+	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/db-in-cluster-ha.yaml
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/db-managed.yaml
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/db-managed-ecs.yaml
+	@# The production profile runs in-cluster databases as three instances; the study profile as one.
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Cluster") | .spec.instances == 3' .test/db-in-cluster-ha.yaml
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Cluster") | .spec.instances == 1' .test/db-in-cluster.yaml
 	docker run --rm -v $(CURDIR):/repo -w /repo $(KYVERNO_CLI_IMAGE) test tests/policies
 	mkdir -p .test/alerts
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) '.spec' platform/observability/alerts/webservice.yaml > .test/alerts/webservice.yaml

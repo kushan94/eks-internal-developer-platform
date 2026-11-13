@@ -1,0 +1,7 @@
+# The aws-platform setting Terraform's production profile adds, on its own.
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: aws-platform
+data:
+  highAvailability: true

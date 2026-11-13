@@ -44,6 +44,8 @@ spec:
             {{- $ns := $xr.metadata.namespace }}
             {{- $runtime := default "kubernetes" $xr.spec.runtime }}
             {{- $env := default dict (index .context "apiextensions.crossplane.io/environment") }}
+            {{- /* The production profile on EKS sets this in the aws-platform EnvironmentConfig. */}}
+            {{- $ha := dig "highAvailability" false $env }}
             {{- /* Lets Backstage's Kubernetes plugin find everything this WebService creates. */}}
             {{- $backstageId := printf "%s-%s" $ns $name }}
             {{- $url := "" }}
@@ -97,6 +99,18 @@ spec:
                     app.kubernetes.io/name: {{ $name }}
                     backstage.io/kubernetes-id: {{ $backstageId }}
                 spec:
+                  # Spread replicas across zones, then nodes, so one failure never takes
+                  # them all. Soft, so a single-zone cluster such as kind still schedules them.
+                  topologySpreadConstraints:
+                    {{- range $key := list "topology.kubernetes.io/zone" "kubernetes.io/hostname" }}
+                    - maxSkew: 1
+                      topologyKey: {{ $key }}
+                      whenUnsatisfiable: ScheduleAnyway
+                      labelSelector:
+                        matchLabels:
+                          app.kubernetes.io/name: {{ $name }}
+                      matchLabelKeys: [pod-template-hash]
+                    {{- end }}
                   # Meets the restricted Pod Security Standard that workload namespaces enforce.
                   securityContext:
                     runAsNonRoot: true
@@ -166,6 +180,24 @@ spec:
               ports:
                 - port: 80
                   targetPort: {{ $xr.spec.port }}
+            {{- if gt (int $xr.spec.replicas) 1 }}
+            ---
+            # Node drains and upgrades take at most one replica down at a time.
+            apiVersion: policy/v1
+            kind: PodDisruptionBudget
+            metadata:
+              name: {{ $name }}
+              labels:
+                backstage.io/kubernetes-id: {{ $backstageId }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: pdb
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              maxUnavailable: 1
+              selector:
+                matchLabels:
+                  app.kubernetes.io/name: {{ $name }}
+            {{- end }}
             {{- if $metricsPortName }}
             ---
             # Prometheus finds monitors in every namespace.
@@ -383,7 +415,13 @@ spec:
                 gotemplating.fn.crossplane.io/composition-resource-name: database
                 gotemplating.fn.crossplane.io/ready: {{ if ge (int $readyInstances) 1 }}"True"{{ else }}"False"{{ end }}
             spec:
-              instances: 1
+              # A primary and two replicas in the production profile, which CloudNativePG
+              # fails over between; it also adds a PodDisruptionBudget for them.
+              instances: {{ if $ha }}3{{ else }}1{{ end }}
+              {{- if $ha }}
+              affinity:
+                topologyKey: topology.kubernetes.io/zone
+              {{- end }}
               # Shows the database pods on the service's Kubernetes tab in Backstage.
               inheritedMetadata:
                 labels:

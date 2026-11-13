@@ -74,7 +74,7 @@ jobs:
       - name: Give Backstage a read-only Argo CD token
         run: make argocd-backstage-token
       - name: Hand over to Argo CD
-        run: make gitops REPO_URL="https://github.com/${{ github.repository }}.git" AWS_ENABLED=true
+        run: make gitops REPO_URL="https://github.com/${{ github.repository }}.git" AWS_ENABLED=true HIGH_AVAILABILITY="$(terraform -chdir=infra/terraform output -raw high_availability)"
       - name: Apply the aws-platform settings
         run: make aws-environment
       - name: Wait for Argo CD

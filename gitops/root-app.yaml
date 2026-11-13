@@ -1,4 +1,4 @@
-# The only resource applied by hand. REPO_URL, AWS_ENABLED and AWS_ACCOUNT_ID are filled in by `make gitops`.
+# The only resource applied by hand. REPO_URL, AWS_ENABLED, AWS_ACCOUNT_ID and HIGH_AVAILABILITY are filled in by `make gitops`.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -18,6 +18,8 @@ spec:
           value: "AWS_ENABLED"
         - name: awsAccountId
           value: "AWS_ACCOUNT_ID"
+        - name: highAvailability
+          value: "HIGH_AVAILABILITY"
   destination:
     server: https://kubernetes.default.svc
     namespace: argocd

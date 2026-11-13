@@ -246,6 +246,8 @@ The account is on the AWS Free plan in eu-north-1. The Free plan denies Spot ins
 
 Terraform always creates the VPC, a NAT gateway and the ECS cluster, which cost about $0.05 an hour. Setting `enable_eks=true` adds the EKS cluster, two on-demand nodes and the Pod Identity role for Crossplane, for about $0.38 an hour in total, including the VPC runner. A `$50` monthly budget alert, named `idp-monthly`, excludes credits.
 
+The Infrastructure workflow's `profile` input picks the shape. `study`, the default, is the setup above. `production` uses three AZs, with a NAT gateway and a node in each, Multi-AZ RDS, and more replicas of Kyverno, Crossplane, Backstage and in-cluster databases, for roughly $0.60 an hour. In both profiles, every service's pods spread across zones and nodes, with a PodDisruptionBudget when there's more than one. See [ADR 0016](docs/adr/0016-availability-profile.md).
+
 Before a session, sign in with `aws login` and copy `infra/terraform/terraform.tfvars.example` to `terraform.tfvars`. A full EKS session then looks like this:
 
 ```sh
@@ -297,6 +299,7 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0012: Guardrails with Pod Security Admission, Kyverno and signed images](docs/adr/0012-guardrails.md)
 - [ADR 0013: Metrics with Prometheus, Grafana and one dashboard per service](docs/adr/0013-observability.md)
 - [ADR 0014: Alerts per service, sent to a chat webhook](docs/adr/0014-alerting.md)
+- [ADR 0016: A production profile for availability, and spread for every service](docs/adr/0016-availability-profile.md)
 
 ## License
 [MIT](LICENSE)
