@@ -24,5 +24,8 @@ Any pod could reach any other pod in the cluster. A compromised or misbehaving s
 - **Security groups for pods:** AWS-native, but EKS-only, and per pod rather than per label.
 
 ## Consequences
-- **Services in different namespaces can't call each other.** There's no `WebService` field yet to allow a caller from another namespace. Teams that need it put both services in one namespace for now.
+- **Services in different namespaces can't call each other unless allowed.** `spec.allowFrom` lists the teams, or a team's single service, that may call a service on its port.
+  - Callers are identified by the `platform.example.org/team` label Argo CD puts on team namespaces, which teams can't set, and by the name label the composition puts on pods. A team can't pass itself off as another.
+  - With environments, callers must also be in the same environment, so dev can't call prod.
+  - On a throwaway kind cluster, the rendered policy allowed the listed team, and the listed team's one service, from prod. It blocked the same callers from dev, another service of the allowed team, and a pod with the allowed name in another team's namespace.
 - **The policies only apply to the Kubernetes runtime.** ECS services rely on their security groups, which already only allow the VPC.

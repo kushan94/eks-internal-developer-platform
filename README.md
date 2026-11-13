@@ -125,7 +125,17 @@ Team namespaces, which Argo CD creates from `workloads/` and `apps/`, enforce:
 
 WebServices meet these by default. If an image names its user (such as `USER app`) instead of numbering it, set `runAsUser`. When a rule rejects a service, `kubectl get webservice` shows `SYNCED=False` and the condition says which rule and why. `make test` checks the policies against sample pods. See [ADR 0012](docs/adr/0012-guardrails.md).
 
-**Network isolation:** every service only accepts traffic from its own namespace, Prometheus, and the load balancer if it's public. Its in-cluster database also only accepts traffic from its namespace, the CloudNativePG operator and Prometheus. On EKS the VPC CNI enforces this. See [ADR 0020](docs/adr/0020-network-policies.md).
+**Network isolation:** every service only accepts traffic from its own namespace, Prometheus, and the load balancer if it's public. Its in-cluster database also only accepts traffic from its namespace, the CloudNativePG operator and Prometheus. On EKS the VPC CNI enforces this. To let another team's services call yours, list them:
+
+```yaml
+spec:
+  allowFrom:
+    - team: shop            # every service of team shop
+    - team: billing
+      service: invoices     # only billing's invoices
+```
+
+Callers must be in the same environment, so dev can't call prod. See [ADR 0020](docs/adr/0020-network-policies.md).
 
 ## Metrics, logs, dashboards and alerts
 Every cluster runs metrics-server, Prometheus, Grafana and Alertmanager, and Loki and Alloy for logs. If a service serves Prometheus metrics, say where:

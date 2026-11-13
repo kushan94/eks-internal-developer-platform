@@ -30,6 +30,9 @@ spec:
         managedNamespaceMetadata:
           labels:
             platform.example.org/workload: "true"
+            # Services' allowFrom names callers by team. Teams can't change
+            # namespace labels, so this one can be trusted.
+            platform.example.org/team: '{{ "{{path.basename}}" }}'
             pod-security.kubernetes.io/enforce: restricted
             pod-security.kubernetes.io/enforce-version: latest
         automated:
@@ -86,6 +89,7 @@ spec:
         managedNamespaceMetadata:
           labels:
             platform.example.org/workload: "true"
+            platform.example.org/team: '{{ "{{ index .path.segments 1 }}" }}'
             platform.example.org/environment: '{{ "{{ .path.basename }}" }}'
             pod-security.kubernetes.io/enforce: restricted
             pod-security.kubernetes.io/enforce-version: latest
