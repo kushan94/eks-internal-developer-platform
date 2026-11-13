@@ -217,3 +217,42 @@ Copy this for each session:
   - On EKS they go to a Slack or Discord channel through Alertmanager. The webhook URL lives in Secrets Manager.
   - `make test` unit-tests the rules with `promtool`. Removing the "only the app's own pods" filter makes a test fail.
 - **What surprised me:** CloudNativePG pods carry the service's label too, which is what lets the dashboard show the database. For "is the service down", that's wrong: a healthy database pod would hide a dead app. The rule counts only pods owned by a ReplicaSet.
+
+### 2026-11-13: Alerts and the fixes on EKS
+- **Goal:** Check the alerts on EKS, and the fixes from the previous session on a fresh cluster.
+- **What happened:**
+  - The Cluster workflow passed on the first try, with every app Synced and Healthy. Nodes allowed 110 pods instead of 29.
+  - `make test-db` passed: all databases Ready in 92 seconds, cleanup in 14.
+  - **Alerts:** a deliberately broken service (podinfo without `runAsUser`, so its container never starts) fired `WebServiceDown` in Slack after exactly 5 minutes. Fixing it sent the resolved message within a minute.
+  - Kyverno refused an unsigned image with the policy's own message: "ghcr.io/kushan94 images must be signed by a GitHub Actions workflow in kushan94/eks-internal-developer-platform on main". The signed visits image was admitted.
+- **What surprised me:**
+  - **Finding an unsigned image to test with took a trick.** Every visits build is signed. The `sha256-…` tags in the same package are the signatures themselves, stored as OCI artifacts, and they aren't signed, so one of them made an honest test.
+  - **Scaling a Crossplane-managed Deployment down by hand doesn't work for testing.** Crossplane puts the replica count straight back. A realistic mistake, an image with a named user, made a better broken service.
+- **AWS cost:** under $1, for about 2 hours.
+
+### 2026-11-13: Production hardening, built on kind
+- **Goal:** Take the study platform to a production shape without paying for production around the clock: survive a lost zone, keep and restore data, find logs, isolate teams, promote between environments, scale, and show cost.
+- **What happened:**
+  - Upgraded the AWS account from the Free plan to the Paid plan, to lift its limits on OIDC, Spot and Karpenter. The remaining $146 of credits carried over.
+  - Built twelve pull requests, #38 to #49:
+    - a `production` Terraform profile with 3 AZs, a NAT gateway and node per AZ, Multi-AZ RDS, and more replicas
+    - RDS backups that outlive the nightly destroy, and CloudNativePG backups as EBS snapshots, each with a restore drill
+    - logs with Loki and Alloy
+    - inbound and outbound NetworkPolicies, with `allowFrom` and `allowTo` between teams
+    - dev, staging and prod as namespaces, a Promote workflow, and a Backstage template that creates all three
+    - CPU autoscaling
+    - Argo CD managing itself
+    - cost per service with OpenCost
+  - Everything risky ran on a throwaway kind cluster with its own kubeconfig before it reached a pull request: network enforcement, autoscaling under load, Argo CD adopting its own Helm release, log shipping, and cost figures.
+  - Merging #50 started both image workflows at the same second, and both pushed to `main`, which the earlier retry fix (#34) is for. The new visits build went to dev only, leaving staging and prod on the old image.
+- **What surprised me:**
+  - **The Paid plan didn't lift the Free plan's limits.** The account reported `PAID / ACTIVE`, but stayed in AWS's Free plan organization, whose policy still denied `iam:CreateOpenIDConnectProvider` and `ec2:CreateFleet` hours later. IAM's policy simulator (`simulate-principal-policy`) showed it without creating anything. GitHub OIDC is built but waiting.
+  - **OpenCost broke the existing alerts.** By default it publishes its own copy of `kube_pod_labels`. With two copies, Prometheus refuses every join on pod labels as many-to-many, so `WebServiceDown` and the cost rule both failed the moment OpenCost started. The unit test passed, because it feeds clean data; only the live test showed it. `emitKsmV1Metrics: false` fixed it. The narrower `emitKsmV1MetricsOnly` doesn't, because it still emits `kube_pod_labels`.
+  - **OpenCost had no prices at all on a fresh pod.** Its filesystem is read-only, and it stores price data in `/var/configs`. The log said so (`mkdir /var/configs: permission denied`), but I first blamed the setting I had just changed. On EKS this would have meant no AWS pricing. An `emptyDir` fixed it.
+  - **In a NetworkPolicy, one entry with two selectors is AND; two entries are OR.** `allowFrom: {team: billing, service: invoices}` must put the namespace and pod selectors in the same `from` entry. Split up, any pod named `invoices` in any namespace would get in. The live test included exactly that pod, and it was blocked.
+  - **A service's Backstage ID can't be trusted for security.** Once environments needed a shared ID, it came from a label on the WebService, so any team could claim another's. Network rules use the team label Argo CD puts on namespaces, which teams can't set, and the name label the composition puts on pods.
+  - **The Kustomize image crashed on my Mac.** `registry.k8s.io/kustomize` is amd64 only. Under emulation on Apple Silicon it failed now and then and left a core dump in the repo, which I first mistook for a Docker caching issue. `kubectl kustomize` runs natively.
+  - **My yq assertions passed by luck, four times.** `select(...) | A and B` runs `B` on every document. A stray `false` in the test output was the only sign. The Makefile now has a note, and every assertion was re-checked to fail on a wrong value.
+  - **Stacked pull requests merged into each other, not `main`.** #38 went into `main` first, then #39 to #49 each merged into the branch below it, so `main` only had #38. Nothing was lost: the top branch held every commit, and one more pull request (#50) brought them in.
+  - **Server-side diff keeps solving the same problem.** Kyverno's CRDs, Argo CD's own secret and External Secrets' webhook certificates all have fields that something other than Git fills in.
+- **AWS cost:** $0 for building; everything ran on kind.
