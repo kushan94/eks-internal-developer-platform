@@ -23,6 +23,7 @@ TF_STATE_BUCKET ?= $(shell terraform -chdir=infra/bootstrap output -raw state_bu
 KYVERNO_CLI_IMAGE ?= ghcr.io/kyverno/kyverno-cli:v1.19.2
 YQ_IMAGE ?= mikefarah/yq:4.47.2
 PROMETHEUS_IMAGE ?= prom/prometheus:v3.7.3
+ALLOY_IMAGE ?= grafana/alloy:v1.21.3
 TF_RUN = docker run --rm -v $(CURDIR)/infra/terraform:/workspace -w /workspace $(TF_IMAGE)
 
 .PHONY: local-up local-down cluster argocd argocd-backstage-token external-secrets platform-bootstrap wait-apps local-git gitops demo status backstage aws-environment test tf-validate tf-init bootstrap github-setup
@@ -89,7 +90,7 @@ aws-environment: ## Apply the aws-platform EnvironmentConfig from Terraform outp
 	$(KUBECTL) wait crd environmentconfigs.apiextensions.crossplane.io --for=condition=Established --timeout=60s
 	terraform -chdir=infra/terraform output -raw aws_platform_environment | $(KUBECTL) apply -f -
 
-test: ## Render the WebService composition for each runtime, database class and profile, validate it, test the Kyverno policies and the alert rules
+test: ## Render the WebService composition for each runtime, database class and profile, validate it, test the Kyverno policies, the alert rules and the log pipeline
 	@rm -rf .test && mkdir -p .test/schemas
 	cp platform/crossplane/aws/providers.yaml platform/crossplane/webservice/definition.yaml .test/schemas/
 	$(CROSSPLANE) render --include-full-xr tests/render/xr-kubernetes.yaml \
@@ -140,6 +141,9 @@ test: ## Render the WebService composition for each runtime, database class and 
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) '.spec' platform/observability/alerts/webservice.yaml > .test/alerts/webservice.yaml
 	docker run --rm --entrypoint promtool -v $(CURDIR):/repo -w /repo $(PROMETHEUS_IMAGE) check rules .test/alerts/webservice.yaml
 	docker run --rm --entrypoint promtool -v $(CURDIR):/repo -w /repo $(PROMETHEUS_IMAGE) test rules tests/alerts/webservice-test.yaml
+	@# Alloy's log pipeline must parse.
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) '.data["config.alloy"]' platform/observability/logs/alloy-config.yaml > .test/config.alloy
+	docker run --rm -v $(CURDIR)/.test:/w $(ALLOY_IMAGE) fmt /w/config.alloy > /dev/null
 
 test-db: ## On a running cluster: create both database classes, log in, check isolation and cleanup
 	scripts/test-databases.sh $(KUBE_CONTEXT)

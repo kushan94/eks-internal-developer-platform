@@ -1,6 +1,6 @@
-# Metrics for the platform and every service: metrics-server for kubectl top
-# and Backstage, Prometheus to collect metrics, Grafana to show them, and
-# Alertmanager to send alerts to chat on EKS.
+# Metrics and logs for the platform and every service: metrics-server for
+# kubectl top and Backstage, Prometheus to collect metrics, Loki and Alloy to
+# collect logs, Grafana to show both, and Alertmanager to send alerts to chat on EKS.
 {{- $sync := dict "automated" (dict "prune" true "selfHeal" true) "syncOptions" (list "CreateNamespace=true" "ServerSideApply=true" "SkipDryRunOnMissingResource=true") "retry" (dict "limit" 20 "backoff" (dict "duration" "15s" "factor" 2 "maxDuration" "2m")) }}
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -91,6 +91,12 @@ spec:
             - pods=[backstage.io/kubernetes-id]
         grafana:
           defaultDashboardsTimezone: utc
+          additionalDataSources:
+            - name: Loki
+              type: loki
+              uid: loki
+              url: http://loki.monitoring.svc:3100
+              access: proxy
           {{- if .Values.aws.enabled }}
           # GitHub login. The OAuth app's client ID and secret come from
           # Secrets Manager through External Secrets.
@@ -109,6 +115,118 @@ spec:
               role_attribute_path: "contains([{{ range $i, $u := .Values.grafanaAdmins }}{{ if $i }}, {{ end }}'{{ $u }}'{{ end }}], login) && 'Admin' || ''"
               role_attribute_strict: true
           {{- end }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    {{- toYaml $sync | nindent 4 }}
+---
+# Loki stores logs as a single process: in S3 on EKS, so they outlive the
+# nightly destroy, and on local disk on kind. Logs are kept for 7 days.
+{{- $logStore := ternary "s3" "filesystem" .Values.aws.enabled }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: loki
+  namespace: argocd
+spec:
+  project: platform
+  source:
+    repoURL: https://grafana.github.io/helm-charts
+    chart: loki
+    targetRevision: 7.5.0
+    helm:
+      valuesObject:
+        deploymentMode: SingleBinary
+        loki:
+          auth_enabled: false
+          commonConfig:
+            replication_factor: 1
+          schemaConfig:
+            configs:
+              - from: "2026-11-01"
+                store: tsdb
+                object_store: {{ $logStore }}
+                schema: v13
+                index:
+                  prefix: index_
+                  period: 24h
+          storage:
+            type: {{ $logStore }}
+            {{- if .Values.aws.enabled }}
+            # Created by the bootstrap stack. Loki reaches it through Pod Identity.
+            bucketNames:
+              chunks: idp-logs-{{ .Values.awsAccountId }}
+              ruler: idp-logs-{{ .Values.awsAccountId }}
+            s3:
+              region: {{ .Values.region }}
+            {{- end }}
+          limits_config:
+            retention_period: 168h
+          compactor:
+            retention_enabled: true
+            delete_request_store: {{ $logStore }}
+        serviceAccount:
+          name: loki
+        singleBinary:
+          replicas: 1
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 1Gi}
+          persistence:
+            size: 5Gi
+        read:
+          replicas: 0
+        write:
+          replicas: 0
+        backend:
+          replicas: 0
+        # The chart's defaults for a scaled-out Loki, which this doesn't need:
+        # the caches alone reserve 9 GiB.
+        gateway:
+          enabled: false
+        chunksCache:
+          enabled: false
+        resultsCache:
+          enabled: false
+        lokiCanary:
+          enabled: false
+        test:
+          enabled: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    {{- toYaml $sync | nindent 4 }}
+---
+# Alloy runs on every node and ships container logs to Loki. Its pipeline
+# is in platform/observability/logs.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: alloy
+  namespace: argocd
+spec:
+  project: platform
+  sources:
+    - repoURL: https://grafana.github.io/helm-charts
+      chart: alloy
+      targetRevision: 1.15.0
+      helm:
+        valuesObject:
+          alloy:
+            configMap:
+              create: false
+              name: alloy-config
+              key: config.alloy
+            mounts:
+              varlog: true
+            resources:
+              requests: {cpu: 50m, memory: 128Mi}
+              limits: {memory: 512Mi}
+    - repoURL: {{ .Values.repoURL }}
+      targetRevision: {{ .Values.targetRevision }}
+      path: platform/observability/logs
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring
