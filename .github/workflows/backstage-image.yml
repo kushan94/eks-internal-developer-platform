@@ -54,5 +54,11 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -am "Deploy Backstage ${GITHUB_SHA::7}"
-          git push
+          # The other image workflow may have pushed to main in the meantime.
+          for attempt in 1 2 3 4 5; do
+            git push && break
+            [ "$attempt" = 5 ] && exit 1
+            sleep $((attempt * 5))
+            git pull --rebase
+          done
           echo "Deployed Backstage image ${GITHUB_SHA::7}." >> "$GITHUB_STEP_SUMMARY"
