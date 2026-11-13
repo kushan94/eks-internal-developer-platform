@@ -85,7 +85,9 @@ workloads/demo/visits/
   envs/prod/       image and overrides  ->  demo-prod (at least 2 replicas)
 ```
 
-New builds of visits go to dev automatically. One Backstage component, dashboard and set of alerts covers every environment, with an environment label to tell them apart. Services written as a single file in `workloads/<team>/` keep working as before. See [ADR 0021](docs/adr/0021-environments.md).
+New builds of visits go to dev automatically. To move a tested image on, run the **Promote** workflow (Actions → Promote, or `gh workflow run promote.yml -f service=demo/visits -f to=staging`). It opens a pull request that copies the exact image from dev to staging, or staging to prod. Merging it deploys. If the repo doesn't let Actions open pull requests, the run's summary has a one-click link instead.
+
+Backstage's Web Service template creates services with environments by default (**Run in dev, staging and prod**). `make test-template` renders it both ways and validates the result. One Backstage component, dashboard and set of alerts covers every environment, with an environment label to tell them apart. Services written as a single file in `workloads/<team>/` keep working as before. See [ADR 0021](docs/adr/0021-environments.md).
 
 ## Public URLs
 On EKS, add `public: true` to a Kubernetes-runtime WebService to serve it at `https://<name>-<namespace>.idp.skyforgelab.cloud`. Its URL appears in `kubectl get webservice` and in `status.url`. One shared ALB, created from a Gateway API Gateway, serves every public service, and ExternalDNS publishes the hostnames. See [ADR 0009](docs/adr/0009-public-urls.md).

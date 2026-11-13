@@ -1,0 +1,7 @@
+apiVersion: platform.example.org/v1alpha1
+kind: WebService
+metadata:
+  name: ${{ values.name }}
+spec:
+  image: ${{ values.image }}
+  replicas: 1

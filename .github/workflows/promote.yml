@@ -1,0 +1,80 @@
+name: Promote
+
+# Moves a service's tested image to the next environment through a pull
+# request: dev to staging, or staging to prod. It copies the exact image the
+# previous environment runs, so prod only ever gets what staging ran.
+# Merging the pull request is the approval.
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Service, as team/service, e.g. demo/visits"
+        type: string
+        required: true
+      to:
+        description: Environment to promote to
+        type: choice
+        options: [staging, prod]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: promote-${{ inputs.service }}-${{ inputs.to }}
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Open a pull request
+        env:
+          SERVICE: ${{ inputs.service }}
+          TO: ${{ inputs.to }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The service name becomes a path and a branch name, so it must be plain.
+          [[ $SERVICE =~ ^[a-z0-9-]+/[a-z0-9-]+$ ]] || { echo "::error::service must look like team/service"; exit 1; }
+          case "$TO" in staging) from=dev ;; prod) from=staging ;; esac
+          envs="workloads/$SERVICE/envs"
+          for env in "$from" "$TO"; do
+            [ -f "$envs/$env/webservice.yaml" ] || { echo "::error::$envs/$env/webservice.yaml doesn't exist"; exit 1; }
+          done
+
+          image="$(yq '.spec.image' "$envs/$from/webservice.yaml")"
+          current="$(yq '.spec.image' "$envs/$TO/webservice.yaml")"
+          [[ $image == *:* && $image != null ]] || { echo "::error::no image in $envs/$from/webservice.yaml"; exit 1; }
+          if [ "$image" = "$current" ]; then
+            echo "$TO already runs $image." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          tag="${image##*:}"
+          branch="promote/${SERVICE//\//-}/$TO/${tag:0:12}"
+          sed -i -E "s|^  image: .*|  image: $image|" "$envs/$TO/webservice.yaml"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -c "$branch"
+          git commit -am "Promote $SERVICE to $TO (${tag:0:7})"
+          git push -f origin "$branch"
+
+          title="Promote $SERVICE to $TO (${tag:0:7})"
+          body="Copies the image $from runs to $TO.
+
+          | | Image |
+          |---|---|
+          | $TO (now) | \`$current\` |
+          | $TO (after merge) | \`$image\` |
+
+          Merging this deploys it. Close it to cancel."
+          if url="$(gh pr create --base main --head "$branch" --title "$title" --body "$body" 2>&1)"; then
+            echo "Opened $url" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            # Repos that don't let Actions open pull requests get a link instead.
+            echo "$url"
+            link="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/compare/main...$branch?expand=1"
+            echo "Pushed \`$branch\`. [Open the pull request]($link)." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
