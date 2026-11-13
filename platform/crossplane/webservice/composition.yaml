@@ -85,6 +85,7 @@ spec:
                    service counts as ready once it has its minimum. */}}
             {{- $autoscaling := $xr.spec.autoscaling }}
             {{- if and $autoscaling (ne $runtime "kubernetes") }}{{ fail "autoscaling is only available for the kubernetes runtime for now" }}{{ end }}
+            {{- if and $xr.spec.allowFrom (ne $runtime "kubernetes") }}{{ fail "allowFrom is only available for the kubernetes runtime; ECS services are reachable from the whole VPC" }}{{ end }}
             {{- $minReplicas := $xr.spec.replicas }}
             {{- with $autoscaling }}{{ $minReplicas = .minReplicas }}{{ end }}
             {{- if eq $runtime "kubernetes" }}
@@ -272,6 +273,24 @@ spec:
                     - ipBlock:
                         cidr: {{ . }}
                     {{- end }}
+                  ports:
+                    - port: {{ $xr.spec.port }}
+                {{- end }}
+                {{- range $xr.spec.allowFrom }}
+                # Allowed by allowFrom. Teams can't set namespace labels, and the
+                # composition sets each pod's name label, so neither can be faked.
+                - from:
+                    - namespaceSelector:
+                        matchLabels:
+                          platform.example.org/team: {{ .team }}
+                          {{- with $environment }}
+                          platform.example.org/environment: {{ . }}
+                          {{- end }}
+                      {{- with .service }}
+                      podSelector:
+                        matchLabels:
+                          app.kubernetes.io/name: {{ . }}
+                      {{- end }}
                   ports:
                     - port: {{ $xr.spec.port }}
                 {{- end }}

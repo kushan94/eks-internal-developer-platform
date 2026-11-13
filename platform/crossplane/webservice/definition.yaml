@@ -47,6 +47,25 @@ spec:
                   minimum: 1
                   default: 2
                   description: Number of copies to run. Ignored when autoscaling is set.
+                allowFrom:
+                  type: array
+                  maxItems: 20
+                  description: >-
+                    Other teams' services that may call this one, on its port. By
+                    default only its own namespace can. With environments, callers
+                    must be in the same environment. Kubernetes runtime only.
+                  items:
+                    type: object
+                    required: [team]
+                    properties:
+                      team:
+                        type: string
+                        pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+                        description: The calling team, as named in workloads/<team>.
+                      service:
+                        type: string
+                        pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+                        description: One of the team's services. Leave out to allow all of them.
                 autoscaling:
                   type: object
                   description: >-

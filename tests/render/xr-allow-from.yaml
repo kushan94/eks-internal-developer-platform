@@ -1,0 +1,19 @@
+# Called by every service of team shop, and by billing's invoices service,
+# but only from the same environment.
+apiVersion: platform.example.org/v1alpha1
+kind: WebService
+metadata:
+  name: catalog
+  namespace: team-a-prod
+  labels:
+    backstage.io/kubernetes-id: team-a-catalog
+    platform.example.org/environment: prod
+spec:
+  runtime: kubernetes
+  image: nginxinc/nginx-unprivileged:1.29-alpine
+  port: 8080
+  replicas: 2
+  allowFrom:
+    - team: shop
+    - team: billing
+      service: invoices
