@@ -10,6 +10,11 @@ spec:
   runtime: ${{ values.runtime }}
   port: ${{ values.port }}
   public: ${{ values.public }}
+{%- if values.autoscaling %}
+  # Each environment sets its own minimum.
+  autoscaling:
+    maxReplicas: ${{ values.maxReplicas }}
+{%- endif %}
 {%- if values.database != 'none' %}
   database:
     class: ${{ values.database }}

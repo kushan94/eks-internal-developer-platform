@@ -1,0 +1,14 @@
+# Must be refused by the XRD: maxReplicas below minReplicas.
+apiVersion: platform.example.org/v1alpha1
+kind: WebService
+metadata:
+  name: search
+  namespace: team-a
+spec:
+  runtime: kubernetes
+  image: nginxinc/nginx-unprivileged:1.29-alpine
+  port: 8080
+  replicas: 2
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 1

@@ -74,6 +74,19 @@ The container gets `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD` and 
 
 **Backups:** with the production profile, both RDS instances keep 7 days of automated backups, including point-in-time restore, and keep them after the nightly destroy. **`make rds-restore-drill KUBE_CONTEXT=idp-eks`** restores the shared server to a new instance and checks the data is there. See [ADR 0017](docs/adr/0017-rds-backups.md). In-cluster databases are backed up as EBS snapshots when they're created and every 6 hours, and **`make cnpg-restore-drill`** restores one into a new cluster. See [ADR 0018](docs/adr/0018-cloudnativepg-backups.md).
 
+## Autoscaling
+Instead of a fixed `replicas`, a Kubernetes service can scale on CPU:
+
+```yaml
+spec:
+  autoscaling:
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilization: 70   # optional, % of the CPU request
+```
+
+The composition adds a HorizontalPodAutoscaler and leaves the replica count to it. In prod, `minReplicas` must be at least 2. See [ADR 0022](docs/adr/0022-autoscaling.md).
+
 ## Environments
 A service can run in dev, staging and prod, each in its own namespace (`<team>-dev`, `<team>-staging`, `<team>-prod`) with its own database:
 
@@ -325,6 +338,7 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0019: Logs for every service with Loki and Alloy](docs/adr/0019-logs.md)
 - [ADR 0020: Isolate every service's inbound traffic with NetworkPolicies](docs/adr/0020-network-policies.md)
 - [ADR 0021: Environments as namespaces, promoted through Git](docs/adr/0021-environments.md)
+- [ADR 0022: Autoscale services on CPU with a HorizontalPodAutoscaler](docs/adr/0022-autoscaling.md)
 
 ## License
 [MIT](LICENSE)

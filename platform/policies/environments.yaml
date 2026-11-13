@@ -23,8 +23,15 @@ spec:
         apiVersions: [v1alpha1]
         operations: [CREATE, UPDATE]
         resources: [webservices]
+  # With autoscaling, the minimum is what counts; replicas is ignored then.
+  variables:
+    - name: minimum
+      expression: >-
+        has(object.spec.autoscaling) ? object.spec.autoscaling.minReplicas :
+        (has(object.spec.replicas) ? object.spec.replicas : 0)
   validations:
-    - expression: has(object.spec.replicas) && object.spec.replicas >= 2
+    - expression: variables.minimum >= 2
       messageExpression: >-
         'services in prod need at least 2 replicas; ' + object.metadata.name + ' asks for ' +
-        (has(object.spec.replicas) ? string(object.spec.replicas) : 'the default')
+        (variables.minimum == 0 ? 'the default' :
+         string(variables.minimum) + (has(object.spec.autoscaling) ? ' (autoscaling minReplicas)' : ''))

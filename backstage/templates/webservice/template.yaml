@@ -13,7 +13,8 @@ spec:
 
   parameters:
     - title: Service details
-      # In-cluster databases run next to Kubernetes pods, so ECS services can't use them.
+      # In-cluster databases run next to Kubernetes pods, and autoscaling is
+      # Kubernetes-only for now, so ECS services can't use either.
       if:
         properties:
           runtime:
@@ -23,6 +24,8 @@ spec:
           database:
             not:
               const: in-cluster
+          autoscaling:
+            const: false
       required:
         - name
         - namespace
@@ -78,9 +81,15 @@ spec:
         replicas:
           title: Replicas
           type: integer
+          description: With autoscaling, the minimum.
           default: 2
           minimum: 1
           maximum: 10
+        autoscaling:
+          title: Autoscale on CPU
+          type: boolean
+          default: false
+          description: Add replicas when average CPU use passes 70% of the request, up to the maximum below. Kubernetes runtime only.
         environments:
           title: Run in dev, staging and prod
           type: boolean
@@ -108,6 +117,23 @@ spec:
               title: Managed (shared RDS, works with both runtimes)
             - const: in-cluster
               title: In-cluster (CloudNativePG, Kubernetes runtime only)
+      # The maximum only appears when autoscaling is on.
+      dependencies:
+        autoscaling:
+          oneOf:
+            - properties:
+                autoscaling:
+                  const: false
+            - properties:
+                autoscaling:
+                  const: true
+                maxReplicas:
+                  title: Maximum replicas
+                  type: integer
+                  default: 6
+                  minimum: 2
+                  maximum: 50
+              required: [maxReplicas]
 
   steps:
     - id: render
@@ -123,6 +149,8 @@ spec:
           image: ${{ parameters.image }}
           port: ${{ parameters.port }}
           replicas: ${{ parameters.replicas }}
+          autoscaling: ${{ parameters.autoscaling }}
+          maxReplicas: ${{ parameters.maxReplicas }}
           public: ${{ parameters.public }}
           database: ${{ parameters.database }}
           environments: ${{ parameters.environments }}
@@ -140,6 +168,8 @@ spec:
           image: ${{ parameters.image }}
           port: ${{ parameters.port }}
           replicas: ${{ parameters.replicas }}
+          autoscaling: ${{ parameters.autoscaling }}
+          maxReplicas: ${{ parameters.maxReplicas }}
           public: ${{ parameters.public }}
           database: ${{ parameters.database }}
 
@@ -156,6 +186,8 @@ spec:
           image: ${{ parameters.image }}
           port: ${{ parameters.port }}
           replicas: ${{ parameters.replicas }}
+          autoscaling: ${{ parameters.autoscaling }}
+          maxReplicas: ${{ parameters.maxReplicas }}
           public: ${{ parameters.public }}
           database: ${{ parameters.database }}
 

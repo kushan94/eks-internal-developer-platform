@@ -5,3 +5,7 @@ metadata:
 spec:
   image: ${{ values.image }}
   replicas: 1
+{%- if values.autoscaling %}
+  autoscaling:
+    minReplicas: 1
+{%- endif %}

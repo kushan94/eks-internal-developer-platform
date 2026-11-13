@@ -6,3 +6,7 @@ metadata:
 spec:
   image: ${{ values.image }}
   replicas: {% if values.replicas < 2 %}2{% else %}${{ values.replicas }}{% endif %}
+{%- if values.autoscaling %}
+  autoscaling:
+    minReplicas: {% if values.replicas < 2 %}2{% else %}${{ values.replicas }}{% endif %}
+{%- endif %}

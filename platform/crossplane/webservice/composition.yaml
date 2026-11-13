@@ -81,6 +81,12 @@ spec:
             {{- $dbSecret = printf "%s-db" $name }}
             {{- $dbHost = $pg.host }}
             {{- end }}
+            {{- /* With autoscaling, the HorizontalPodAutoscaler owns the replica count and the
+                   service counts as ready once it has its minimum. */}}
+            {{- $autoscaling := $xr.spec.autoscaling }}
+            {{- if and $autoscaling (ne $runtime "kubernetes") }}{{ fail "autoscaling is only available for the kubernetes runtime for now" }}{{ end }}
+            {{- $minReplicas := $xr.spec.replicas }}
+            {{- with $autoscaling }}{{ $minReplicas = .minReplicas }}{{ end }}
             {{- if eq $runtime "kubernetes" }}
             {{- $available := dig "deployment" "resource" "status" "availableReplicas" 0 (default dict .observed.resources) }}
             apiVersion: apps/v1
@@ -91,9 +97,11 @@ spec:
                 backstage.io/kubernetes-id: {{ $backstageId }}
               annotations:
                 gotemplating.fn.crossplane.io/composition-resource-name: deployment
-                gotemplating.fn.crossplane.io/ready: {{ if ge (int $available) (int $xr.spec.replicas) }}"True"{{ else }}"False"{{ end }}
+                gotemplating.fn.crossplane.io/ready: {{ if ge (int $available) (int $minReplicas) }}"True"{{ else }}"False"{{ end }}
             spec:
+              {{- if not $autoscaling }}
               replicas: {{ $xr.spec.replicas }}
+              {{- end }}
               selector:
                 matchLabels:
                   app.kubernetes.io/name: {{ $name }}
@@ -187,7 +195,7 @@ spec:
               ports:
                 - port: 80
                   targetPort: {{ $xr.spec.port }}
-            {{- if gt (int $xr.spec.replicas) 1 }}
+            {{- if gt (int $minReplicas) 1 }}
             ---
             # Node drains and upgrades take at most one replica down at a time.
             apiVersion: policy/v1
@@ -204,6 +212,34 @@ spec:
               selector:
                 matchLabels:
                   app.kubernetes.io/name: {{ $name }}
+            {{- end }}
+            {{- with $autoscaling }}
+            ---
+            # Scales the Deployment on CPU use. Needs metrics-server, which every
+            # cluster runs, and the CPU request set on the container above.
+            apiVersion: autoscaling/v2
+            kind: HorizontalPodAutoscaler
+            metadata:
+              name: {{ $name }}
+              labels:
+                backstage.io/kubernetes-id: {{ $backstageId }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: autoscaler
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              scaleTargetRef:
+                apiVersion: apps/v1
+                kind: Deployment
+                name: {{ $name }}
+              minReplicas: {{ .minReplicas }}
+              maxReplicas: {{ .maxReplicas }}
+              metrics:
+                - type: Resource
+                  resource:
+                    name: cpu
+                    target:
+                      type: Utilization
+                      averageUtilization: {{ default 70 .targetCPUUtilization }}
             {{- end }}
             {{- $publicCidrs := dig "aws" "publicSubnetCidrs" list $env }}
             ---

@@ -9,6 +9,11 @@ spec:
   image: ${{ values.image }}
   port: ${{ values.port }}
   replicas: ${{ values.replicas }}
+{%- if values.autoscaling %}
+  autoscaling:
+    minReplicas: ${{ values.replicas }}
+    maxReplicas: ${{ values.maxReplicas }}
+{%- endif %}
   public: ${{ values.public }}
 {%- if values.database != 'none' %}
   database:

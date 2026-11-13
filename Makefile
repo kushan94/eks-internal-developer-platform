@@ -123,6 +123,12 @@ test: ## Render the WebService composition for each runtime, database class, pro
 	for env in workloads/*/*/envs/*; do \
 		kubectl kustomize $$env > .test/env-$$(echo $$env | tr / -).yaml || exit 1; \
 	done
+	$(CROSSPLANE) render --include-full-xr tests/render/xr-autoscaling.yaml \
+		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml > .test/autoscaling.yaml
+	@# Autoscaling is Kubernetes-only, so an ECS service with it must fail to render.
+	! $(CROSSPLANE) render tests/render/xr-autoscaling-ecs.yaml \
+		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml \
+		--extra-resources platform/crossplane/aws/environment.example.yaml > /dev/null 2>&1
 	cp platform/crossplane/webservice/provider-sql.yaml .test/schemas/
 	curl -fsSL -o .test/schemas/httproutes.yaml \
 		https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.6.0/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml
@@ -139,11 +145,17 @@ test: ## Render the WebService composition for each runtime, database class, pro
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/db-in-cluster-ha.yaml
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/db-managed.yaml
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/environment.yaml
+	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/autoscaling.yaml
+	@# The XRD refuses maxReplicas below minReplicas.
+	! $(CROSSPLANE) resource validate --cache-dir .test/cache .test/schemas tests/render/xr-autoscaling-invalid.yaml > /dev/null 2>&1
 	for f in .test/env-*.yaml; do $(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas $$f || exit 1; done
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/db-managed-ecs.yaml
 	@# The production profile runs in-cluster databases as three instances; the study profile as one.
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Cluster") | .spec.instances == 3' .test/db-in-cluster-ha.yaml
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Cluster") | .spec.instances == 1' .test/db-in-cluster.yaml
+	@# With autoscaling, the HorizontalPodAutoscaler owns the replica count.
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Deployment") | (.spec | has("replicas") | not)' .test/autoscaling.yaml
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "HorizontalPodAutoscaler") | (.spec.minReplicas == 2 and .spec.maxReplicas == 8)' .test/autoscaling.yaml
 	@# Environments share the service's Backstage ID but get their own database.
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Deployment") | (.spec.template.metadata.labels["platform.example.org/environment"] == "prod" and .spec.template.metadata.labels["backstage.io/kubernetes-id"] == "demo-visits")' .test/environment.yaml
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Database") | .metadata.annotations["crossplane.io/external-name"] == "demo-prod-visits"' .test/environment.yaml

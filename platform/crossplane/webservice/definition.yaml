@@ -46,6 +46,30 @@ spec:
                   type: integer
                   minimum: 1
                   default: 2
+                  description: Number of copies to run. Ignored when autoscaling is set.
+                autoscaling:
+                  type: object
+                  description: >-
+                    Scale between minReplicas and maxReplicas on CPU use, instead of
+                    running a fixed number of replicas. Kubernetes runtime only.
+                  required: [minReplicas, maxReplicas]
+                  x-kubernetes-validations:
+                    - rule: self.maxReplicas >= self.minReplicas
+                      message: maxReplicas must be at least minReplicas
+                  properties:
+                    minReplicas:
+                      type: integer
+                      minimum: 1
+                    maxReplicas:
+                      type: integer
+                      minimum: 1
+                      maximum: 50
+                    targetCPUUtilization:
+                      type: integer
+                      minimum: 10
+                      maximum: 100
+                      default: 70
+                      description: Average CPU use, as a percentage of each pod's CPU request, to aim for.
                 public:
                   type: boolean
                   default: false
