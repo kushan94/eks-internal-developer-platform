@@ -29,9 +29,13 @@ resource "aws_iam_user" "github_image_push" {
 }
 
 resource "aws_iam_user_policy" "github_image_push" {
-  name = "push-backstage-image"
-  user = aws_iam_user.github_image_push.name
-  policy = jsonencode({
+  name   = "push-backstage-image"
+  user   = aws_iam_user.github_image_push.name
+  policy = local.image_push_policy
+}
+
+locals {
+  image_push_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       { Effect = "Allow", Action = "ecr:GetAuthorizationToken", Resource = "*" },
