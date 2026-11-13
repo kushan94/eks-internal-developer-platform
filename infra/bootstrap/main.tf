@@ -1,5 +1,5 @@
-# Applied once from a laptop. Its own state stays local, because it holds the
-# GitHub access keys, so never commit terraform.tfstate from this folder.
+# Applied once from a laptop. Its own state stays local and holds account
+# details, so never commit terraform.tfstate from this folder.
 
 data "aws_caller_identity" "current" {}
 
@@ -31,9 +31,7 @@ resource "aws_s3_bucket_public_access_block" "state" {
   restrict_public_buckets = true
 }
 
-# The IAM users below came first, while the AWS Free plan denied OIDC
-# providers. They're being replaced by the roles in github-oidc.tf, and
-# share their policies through these locals until they're deleted.
+# Policies shared by the CI roles in github-oidc.tf.
 locals {
   state_lock_policy = jsonencode({
     Version = "2012-10-17"
@@ -60,70 +58,8 @@ locals {
   })
 }
 
-# Runs terraform plan for pull requests. Read-only, plus the state lock file.
-resource "aws_iam_user" "github_plan" {
-  name = "github-plan"
-  path = "/github/"
-}
-
-resource "aws_iam_user_policy_attachment" "github_plan" {
-  user       = aws_iam_user.github_plan.name
-  policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
-}
-
-resource "aws_iam_user_policy" "github_plan_lock" {
-  name   = "terraform-state-lock"
-  user   = aws_iam_user.github_plan.name
-  policy = local.state_lock_policy
-}
-
-resource "aws_iam_user_policy" "github_plan_terraform_secrets" {
-  name   = "read-terraform-secrets"
-  user   = aws_iam_user.github_plan.name
-  policy = local.terraform_secrets_policy
-}
-
-# Runs terraform apply and destroy, only from GitHub environments that need approval or run on main.
-resource "aws_iam_user" "github_apply" {
-  name = "github-apply"
-  path = "/github/"
-}
-
-resource "aws_iam_user_policy_attachment" "github_apply" {
-  user       = aws_iam_user.github_apply.name
-  policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess"
-}
-
-resource "aws_iam_access_key" "github_plan" {
-  user = aws_iam_user.github_plan.name
-}
-
-resource "aws_iam_access_key" "github_apply" {
-  user = aws_iam_user.github_apply.name
-}
-
 output "state_bucket" {
   value = aws_s3_bucket.state.bucket
-}
-
-output "github_plan_access_key_id" {
-  value     = aws_iam_access_key.github_plan.id
-  sensitive = true
-}
-
-output "github_plan_secret_access_key" {
-  value     = aws_iam_access_key.github_plan.secret
-  sensitive = true
-}
-
-output "github_apply_access_key_id" {
-  value     = aws_iam_access_key.github_apply.id
-  sensitive = true
-}
-
-output "github_apply_secret_access_key" {
-  value     = aws_iam_access_key.github_apply.secret
-  sensitive = true
 }
 
 # Credentials for the Argo CD GitHub App. Terraform only creates the secret;

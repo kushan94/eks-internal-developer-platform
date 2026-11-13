@@ -1,6 +1,6 @@
 # ADR 0003: Build locally first and keep EKS ephemeral
 
-**Status:** Accepted (2026-11-03), updated 2026-11-05 for the AWS Free plan
+**Status:** Accepted (2026-11-03), updated 2026-11-05 for the AWS Free plan. The account moved to the Paid plan on 2026-11-13 ([ADR 0015](0015-paid-plan-and-github-oidc.md)), so the Free plan limits below no longer apply.
 
 ## Context
 This is a personal study project, so idle AWS spend is the main risk. Most of the platform APIs can be built and tested without AWS.

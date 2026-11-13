@@ -22,18 +22,7 @@ resource "aws_ecr_lifecycle_policy" "backstage" {
   })
 }
 
-# GitHub Actions pushes Backstage images with this user. It can't do anything else.
-resource "aws_iam_user" "github_image_push" {
-  name = "github-image-push"
-  path = "/github/"
-}
-
-resource "aws_iam_user_policy" "github_image_push" {
-  name   = "push-backstage-image"
-  user   = aws_iam_user.github_image_push.name
-  policy = local.image_push_policy
-}
-
+# The policy for the github-image-push role in github-oidc.tf.
 locals {
   image_push_policy = jsonencode({
     Version = "2012-10-17"
@@ -51,10 +40,6 @@ locals {
   })
 }
 
-resource "aws_iam_access_key" "github_image_push" {
-  user = aws_iam_user.github_image_push.name
-}
-
 # GitHub App that Backstage uses for sign-in and to open pull requests. JSON
 # with appId, clientId, clientSecret, privateKey and webhookSecret, stored with the CLI.
 resource "aws_secretsmanager_secret" "backstage_github_app" {
@@ -67,12 +52,3 @@ output "backstage_repository_url" {
   value = aws_ecr_repository.backstage.repository_url
 }
 
-output "github_image_push_access_key_id" {
-  value     = aws_iam_access_key.github_image_push.id
-  sensitive = true
-}
-
-output "github_image_push_secret_access_key" {
-  value     = aws_iam_access_key.github_image_push.secret
-  sensitive = true
-}

@@ -10,7 +10,7 @@ Backstage ran only on a laptop, with guest sign-in, an allow-all policy and a pe
   - A multi-stage Dockerfile builds the whole app inside Docker.
   - The Backstage image workflow builds it on every change to `backstage/` on `main` and pushes it to the `idp/backstage` ECR repository, tagged with the commit. The repository keeps immutable tags and scans images on push.
   - The workflow then commits the tag to `gitops/root/values.yaml`, and Argo CD deploys it.
-- **CI credentials:** a push-only IAM user, `github-image-push`, in a dedicated `aws-build` environment.
+- **CI credentials:** a push-only IAM user, `github-image-push`, in a dedicated `aws-build` environment. ([ADR 0015](0015-paid-plan-and-github-oidc.md) replaces it with a role of the same name, through GitHub OIDC.)
 - **Database:** RDS PostgreSQL 18 on `db.t4g.micro`, created with each EKS session and destroyed with it. Backstage rebuilds its catalog from Git, so the data is disposable. The connection uses TLS, verified against the RDS CA bundle baked into the image.
 - **GitHub access:** a GitHub App, `<owner>-idp-backstage`, handles both sign-in through OAuth and pull requests (Contents and Pull requests: write). It's installed only on the platform repo. No personal token is involved.
 - **Sign-in:** only GitHub users with a matching `User` entity in the catalog can sign in. The guest provider stays configured for local development but refuses sign-ins in production.
