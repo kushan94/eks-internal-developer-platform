@@ -24,7 +24,6 @@ KYVERNO_CLI_IMAGE ?= ghcr.io/kyverno/kyverno-cli:v1.19.2
 YQ_IMAGE ?= mikefarah/yq:4.47.2
 PROMETHEUS_IMAGE ?= prom/prometheus:v3.7.3
 ALLOY_IMAGE ?= grafana/alloy:v1.21.3
-KUSTOMIZE_IMAGE ?= registry.k8s.io/kustomize/kustomize:v5.7.1
 TF_RUN = docker run --rm -v $(CURDIR)/infra/terraform:/workspace -w /workspace $(TF_IMAGE)
 
 .PHONY: local-up local-down cluster argocd argocd-backstage-token external-secrets platform-bootstrap wait-apps local-git gitops demo status backstage aws-environment test tf-validate tf-init bootstrap github-setup
@@ -121,7 +120,7 @@ test: ## Render the WebService composition for each runtime, database class, pro
 		--extra-resources platform/managed-postgres/local/shared-postgres.yaml > .test/environment.yaml
 	@# Every environment of every service builds, and is a valid WebService.
 	for env in workloads/*/*/envs/*; do \
-		docker run --rm -v $(CURDIR):/repo -w /repo $(KUSTOMIZE_IMAGE) build $$env > .test/env-$$(echo $$env | tr / -).yaml || exit 1; \
+		kubectl kustomize $$env > .test/env-$$(echo $$env | tr / -).yaml || exit 1; \
 	done
 	cp platform/crossplane/webservice/provider-sql.yaml .test/schemas/
 	curl -fsSL -o .test/schemas/httproutes.yaml \
