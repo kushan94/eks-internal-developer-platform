@@ -53,11 +53,18 @@ resource "aws_db_instance" "shared_postgres" {
   # A standby in another AZ that RDS fails over to, in the production profile.
   multi_az = local.high_availability
 
-  # Throwaway data: no snapshots or backups, and nothing blocks deletion.
-  backup_retention_period = 0
-  skip_final_snapshot     = true
-  deletion_protection     = false
-  apply_immediately       = true
+  # Production keeps 7 days of automated backups, which also allow restoring
+  # to any second in that window, and keeps them after the instance is
+  # deleted, so the nightly destroy doesn't take the backups with it. They
+  # expire on their own. The study profile's data is throwaway.
+  backup_retention_period  = local.high_availability ? 7 : 0
+  delete_automated_backups = !local.high_availability
+  copy_tags_to_snapshot    = true
+  skip_final_snapshot      = true
+  # Off even in production, because the nightly destroy must be able to
+  # delete the instance; the retained backups are the safety net instead.
+  deletion_protection = false
+  apply_immediately   = true
 }
 
 # The admin login for External Secrets to hand to provider-sql, with the key
