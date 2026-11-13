@@ -24,6 +24,8 @@ output "aws_platform_environment" {
           subnetIds            = module.vpc.private_subnets
           taskExecutionRoleArn = aws_iam_role.ecs_task_execution.arn
         }
+        # Makes in-cluster databases run three instances across AZs.
+        highAvailability = local.high_availability
       },
       # The shared Postgres server for managed databases, which comes with EKS.
       var.enable_eks ? {
@@ -36,4 +38,9 @@ output "aws_platform_environment" {
       } : {},
     )
   })
+}
+
+output "high_availability" {
+  description = "Whether the production profile is on. make gitops passes it to the root application."
+  value       = local.high_availability
 }

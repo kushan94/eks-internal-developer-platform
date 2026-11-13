@@ -41,3 +41,19 @@ variable "github_repository" {
   type        = string
   default     = "kushan94/eks-internal-developer-platform"
 }
+
+variable "profile" {
+  description = <<-EOT
+    study: two AZs, one NAT gateway, two nodes and single-AZ databases, for
+    cheap sessions. production: three AZs, a NAT gateway and a node in each,
+    Multi-AZ RDS, and more replicas of platform components and in-cluster
+    databases, for about twice the hourly cost.
+  EOT
+  type        = string
+  default     = "study"
+
+  validation {
+    condition     = contains(["study", "production"], var.profile)
+    error_message = "profile must be study or production."
+  }
+}

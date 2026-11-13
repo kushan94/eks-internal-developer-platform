@@ -21,6 +21,10 @@ grafanaAdmins:
 # Set by `make gitops` on EKS, so the account ID stays out of Git.
 awsAccountId: ""
 
+# The production profile: more replicas of platform components. Set by
+# `make gitops` from Terraform's profile on EKS; off on kind.
+highAvailability: false
+
 backstage:
   # Written by the Backstage image workflow after each build. Empty until the
   # first build, which keeps Backstage out of the cluster until there's an image.
