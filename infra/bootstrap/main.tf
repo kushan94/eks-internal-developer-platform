@@ -31,9 +31,34 @@ resource "aws_s3_bucket_public_access_block" "state" {
   restrict_public_buckets = true
 }
 
-# The AWS Free plan denies OIDC providers, so GitHub can't use keyless
-# federation. These users have access keys instead, stored as GitHub
-# environment secrets.
+# The IAM users below came first, while the AWS Free plan denied OIDC
+# providers. They're being replaced by the roles in github-oidc.tf, and
+# share their policies through these locals until they're deleted.
+locals {
+  state_lock_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["s3:PutObject", "s3:DeleteObject"]
+      Resource = "${aws_s3_bucket.state.arn}/*.tflock"
+    }]
+  })
+
+  # Terraform reads secret values to refresh the secrets it writes itself,
+  # such as database logins. The plan identity can already read those values
+  # in the state, so this adds no access, and it can't read any other secret.
+  terraform_secrets_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = "secretsmanager:GetSecretValue"
+      Resource = [
+        "arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:idp/backstage/database-*",
+        "arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:idp/platform/shared-postgres-*",
+      ]
+    }]
+  })
+}
 
 # Runs terraform plan for pull requests. Read-only, plus the state lock file.
 resource "aws_iam_user" "github_plan" {
@@ -47,35 +72,15 @@ resource "aws_iam_user_policy_attachment" "github_plan" {
 }
 
 resource "aws_iam_user_policy" "github_plan_lock" {
-  name = "terraform-state-lock"
-  user = aws_iam_user.github_plan.name
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["s3:PutObject", "s3:DeleteObject"]
-      Resource = "${aws_s3_bucket.state.arn}/*.tflock"
-    }]
-  })
+  name   = "terraform-state-lock"
+  user   = aws_iam_user.github_plan.name
+  policy = local.state_lock_policy
 }
 
-# Terraform reads secret values to refresh the secrets it writes itself, such
-# as database logins. The plan user can already read those values in the
-# state, so this adds no access, and it can't read any other secret.
 resource "aws_iam_user_policy" "github_plan_terraform_secrets" {
-  name = "read-terraform-secrets"
-  user = aws_iam_user.github_plan.name
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Effect = "Allow"
-      Action = "secretsmanager:GetSecretValue"
-      Resource = [
-        "arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:idp/backstage/database-*",
-        "arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:idp/platform/shared-postgres-*",
-      ]
-    }]
-  })
+  name   = "read-terraform-secrets"
+  user   = aws_iam_user.github_plan.name
+  policy = local.terraform_secrets_policy
 }
 
 # Runs terraform apply and destroy, only from GitHub environments that need approval or run on main.

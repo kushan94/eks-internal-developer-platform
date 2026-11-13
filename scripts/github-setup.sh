@@ -62,4 +62,12 @@ done
 out github_image_push_access_key_id | set_secret aws-build AWS_ACCESS_KEY_ID
 out github_image_push_secret_access_key | set_secret aws-build AWS_SECRET_ACCESS_KEY
 
+# The OIDC roles that replace those keys. Their ARNs contain the account ID,
+# so they're secrets rather than values in the workflows.
+out github_plan_role_arn | set_secret aws-plan AWS_ROLE_ARN
+for env in aws-apply aws-destroy; do
+  out github_apply_role_arn | set_secret "$env" AWS_ROLE_ARN
+done
+out github_image_push_role_arn | set_secret aws-build AWS_ROLE_ARN
+
 echo "Environments and secrets are set for $REPO."
