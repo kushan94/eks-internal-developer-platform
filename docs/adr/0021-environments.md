@@ -19,7 +19,10 @@ Each service ran once, and a new image went straight to the only copy. Productio
   - One Backstage component shows every environment's pods and Argo CD apps.
   - The Grafana dashboard has an environment picker, alerts carry an `environment` label, and logs are labelled the same way.
 - **Data never crosses environments.** A service's managed database is named `<namespace>-<name>`, so each environment gets its own. Network policies already block traffic between namespaces.
-- **Promotion is a pull request.** New builds go to dev automatically. Promoting copies the exact image from one environment's file to the next, so prod only runs what staging ran. That's the `Promote` workflow, added separately.
+- **Promotion is a pull request.** New builds go to dev automatically.
+  - The `Promote` workflow (`service`, `to: staging | prod`) copies the exact image from the previous environment's file into the next, and opens a pull request showing the old and new image. So prod only runs what staging ran, and merging the pull request is the approval.
+  - The repo doesn't let Actions open pull requests, because that setting would also let workflows approve them. So the workflow falls back to pushing the branch and linking a one-click pull request in its summary.
+- **The Backstage template creates services with environments by default.** It writes `base` and `envs/{dev,staging,prod}`, with prod at no fewer than 2 replicas, and a catalog entry that shows every environment. Unchecking the option gives the single-file layout. `make test-template` renders both variants with Nunjucks the way Backstage does, and validates the result.
 
 ## Alternatives considered
 - **A cluster per environment:** the strongest isolation, and what larger organizations do for prod. It would double or triple the cost of every session, and needs Argo CD managing several clusters. The Git layout maps onto it later by pointing each environment's destination at another cluster.
