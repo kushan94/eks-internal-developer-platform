@@ -66,6 +66,31 @@ spec:
                         type: string
                         pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
                         description: One of the team's services. Leave out to allow all of them.
+                allowTo:
+                  type: array
+                  maxItems: 20
+                  description: >-
+                    Other teams' services this one calls, on any port. They must also
+                    list it in their allowFrom. By default a service can only reach DNS,
+                    its own namespace and its database. With environments, only the
+                    same environment. Kubernetes runtime only.
+                  items:
+                    type: object
+                    required: [team]
+                    properties:
+                      team:
+                        type: string
+                        pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+                      service:
+                        type: string
+                        pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+                        description: One of the team's services. Leave out to allow all of them.
+                allowInternet:
+                  type: boolean
+                  default: false
+                  description: >-
+                    Let the service connect to the public internet, such as external
+                    APIs. Private address ranges stay blocked. Kubernetes runtime only.
                 autoscaling:
                   type: object
                   description: >-

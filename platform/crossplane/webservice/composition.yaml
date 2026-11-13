@@ -85,7 +85,7 @@ spec:
                    service counts as ready once it has its minimum. */}}
             {{- $autoscaling := $xr.spec.autoscaling }}
             {{- if and $autoscaling (ne $runtime "kubernetes") }}{{ fail "autoscaling is only available for the kubernetes runtime for now" }}{{ end }}
-            {{- if and $xr.spec.allowFrom (ne $runtime "kubernetes") }}{{ fail "allowFrom is only available for the kubernetes runtime; ECS services are reachable from the whole VPC" }}{{ end }}
+            {{- if and (or $xr.spec.allowFrom $xr.spec.allowTo $xr.spec.allowInternet) (ne $runtime "kubernetes") }}{{ fail "allowFrom, allowTo and allowInternet are only available for the kubernetes runtime; ECS services use their security group" }}{{ end }}
             {{- $minReplicas := $xr.spec.replicas }}
             {{- with $autoscaling }}{{ $minReplicas = .minReplicas }}{{ end }}
             {{- if eq $runtime "kubernetes" }}
@@ -244,8 +244,9 @@ spec:
             {{- end }}
             {{- $publicCidrs := dig "aws" "publicSubnetCidrs" list $env }}
             ---
-            # Only the service's own namespace, Prometheus and, for public services,
-            # the load balancer can reach its pods. Other teams' services can't.
+            # Inbound: only the service's own namespace, Prometheus, the load balancer
+            # for public services, and what allowFrom lists. Outbound: only DNS, its own
+            # namespace, its managed database, and what allowTo and allowInternet allow.
             apiVersion: networking.k8s.io/v1
             kind: NetworkPolicy
             metadata:
@@ -259,7 +260,7 @@ spec:
               podSelector:
                 matchLabels:
                   app.kubernetes.io/name: {{ $name }}
-              policyTypes: [Ingress]
+              policyTypes: [Ingress, Egress]
               ingress:
                 - from:
                     - podSelector: {}
@@ -293,6 +294,56 @@ spec:
                       {{- end }}
                   ports:
                     - port: {{ $xr.spec.port }}
+                {{- end }}
+              egress:
+                - to:
+                    - namespaceSelector:
+                        matchLabels:
+                          kubernetes.io/metadata.name: kube-system
+                      podSelector:
+                        matchLabels:
+                          k8s-app: kube-dns
+                  ports:
+                    - {port: 53, protocol: UDP}
+                    - {port: 53, protocol: TCP}
+                - to:
+                    - podSelector: {}
+                {{- if eq $dbClass "managed" }}
+                - to:
+                    {{- if $pg.namespace }}
+                    - namespaceSelector:
+                        matchLabels:
+                          kubernetes.io/metadata.name: {{ $pg.namespace }}
+                    {{- else if dig "aws" "vpcCidr" "" $env }}
+                    # RDS, somewhere in the VPC.
+                    - ipBlock:
+                        cidr: {{ $env.aws.vpcCidr }}
+                    {{- else }}
+                    {{- fail "managed databases need managedPostgres.namespace or aws.vpcCidr, so the service's network policy can let it reach the server" }}
+                    {{- end }}
+                  ports:
+                    - port: {{ $pg.port }}
+                {{- end }}
+                {{- range $xr.spec.allowTo }}
+                - to:
+                    - namespaceSelector:
+                        matchLabels:
+                          platform.example.org/team: {{ .team }}
+                          {{- with $environment }}
+                          platform.example.org/environment: {{ . }}
+                          {{- end }}
+                      {{- with .service }}
+                      podSelector:
+                        matchLabels:
+                          app.kubernetes.io/name: {{ . }}
+                      {{- end }}
+                {{- end }}
+                {{- if $xr.spec.allowInternet }}
+                # Anywhere public; the cluster's, the VPC's and other private ranges stay blocked.
+                - to:
+                    - ipBlock:
+                        cidr: 0.0.0.0/0
+                        except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16]
                 {{- end }}
             {{- if $metricsPortName }}
             ---

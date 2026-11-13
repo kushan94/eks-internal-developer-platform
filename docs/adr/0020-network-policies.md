@@ -12,7 +12,7 @@ Any pod could reach any other pod in the cluster. A compromised or misbehaving s
   - for `public: true`, the load balancer, on the service's port. The ALB sends traffic straight to pod IPs from the public subnets, whose ranges reach the composition through the `aws-platform` EnvironmentConfig as `aws.publicSubnetCidrs`.
 - **In-cluster databases get their own policy:** their namespace, the CloudNativePG operator in `cnpg-system`, and Prometheus.
 - **The VPC CNI add-on enforces policies** (`enableNetworkPolicy`). kind's default network plugin enforces them too.
-- **Only inbound traffic is restricted.** Outbound stays open.
+- **Only inbound traffic is restricted.** Outbound stays open. ([ADR 0024](0024-egress-policies.md) restricts it.)
 - **Every pod in a team namespace is covered.** Teams can only create `WebService`s there, so every pod comes from the composition.
 - **Testing:**
   - `make test` checks the rendered policies' shape, including the load balancer rule.
