@@ -95,8 +95,8 @@ Team namespaces, which Argo CD creates from `workloads/` and `apps/`, enforce:
 
 WebServices meet these by default. If an image names its user (such as `USER app`) instead of numbering it, set `runAsUser`. When a rule rejects a service, `kubectl get webservice` shows `SYNCED=False` and the condition says which rule and why. `make test` checks the policies against sample pods. See [ADR 0012](docs/adr/0012-guardrails.md).
 
-## Metrics and dashboards
-Every cluster runs metrics-server, Prometheus and Grafana. If a service serves Prometheus metrics, say where:
+## Metrics, dashboards and alerts
+Every cluster runs metrics-server, Prometheus, Grafana and Alertmanager. If a service serves Prometheus metrics, say where:
 
 ```yaml
 spec:
@@ -110,6 +110,13 @@ One-time Grafana login setup for EKS:
 1. **Create a GitHub OAuth app:** GitHub → Settings → Developer settings → OAuth Apps → New. Use homepage `https://grafana.idp.skyforgelab.cloud` and callback `https://grafana.idp.skyforgelab.cloud/login/github`, then generate a client secret.
 2. **Create the secret:** run `make bootstrap` to create the empty Secrets Manager secret.
 3. **Store the credentials:** run `aws secretsmanager put-secret-value --secret-id idp/grafana/github-oauth --secret-string '{"clientId":"...","clientSecret":"..."}'`.
+
+Every service gets two alerts: `WebServiceDown` when none of its pods are ready for 5 minutes, and `WebServiceRestarting` when it restarts more than twice in 15 minutes. Each links to the service's dashboard. On EKS, warning and critical alerts go to a Slack or Discord channel; on kind, they show in Grafana only. See [ADR 0014](docs/adr/0014-alerting.md).
+
+One-time alert setup for EKS:
+1. **Create an incoming webhook** in Slack, or in Discord under the channel's Integrations → Webhooks. For Discord, add `/slack` to the end of the URL.
+2. **Create the secret:** run `make bootstrap` to create the empty Secrets Manager secret.
+3. **Store the URL:** run `aws secretsmanager put-secret-value --secret-id idp/alerting/webhook --secret-string '{"url":"..."}'`.
 
 ## Developer portal
 In the cluster, Backstage runs at `https://backstage.idp.skyforgelab.cloud` with GitHub sign-in. See [ADR 0010](docs/adr/0010-backstage-in-cluster.md).
@@ -170,7 +177,7 @@ colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
 - [x] **8. Traffic:** public HTTPS URLs with Gateway API on EKS, for the Kubernetes runtime
 - [ ] **8b. Traffic for ECS:** public URLs for the ECS runtime
 - [x] **9. Guardrails:** Pod Security Admission, Kyverno CEL policies and keyless image signing
-- [x] **10. Metrics:** metrics-server, Prometheus, Grafana with GitHub login, and a dashboard per service linked from Backstage
+- [x] **10. Metrics:** metrics-server, Prometheus, Grafana with GitHub login, a dashboard per service linked from Backstage, and alerts to chat
 - [ ] **10b. Tracing, cost and scaling:** OpenTelemetry, OpenCost, Karpenter and KEDA
 - [ ] **11. Article:** publish the write-up
 
@@ -289,6 +296,7 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0011: Databases for WebServices, managed or in-cluster](docs/adr/0011-databases.md)
 - [ADR 0012: Guardrails with Pod Security Admission, Kyverno and signed images](docs/adr/0012-guardrails.md)
 - [ADR 0013: Metrics with Prometheus, Grafana and one dashboard per service](docs/adr/0013-observability.md)
+- [ADR 0014: Alerts per service, sent to a chat webhook](docs/adr/0014-alerting.md)
 
 ## License
 [MIT](LICENSE)

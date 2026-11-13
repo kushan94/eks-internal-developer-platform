@@ -1,5 +1,6 @@
 # Metrics for the platform and every service: metrics-server for kubectl top
-# and Backstage, Prometheus to collect metrics, and Grafana to show them.
+# and Backstage, Prometheus to collect metrics, Grafana to show them, and
+# Alertmanager to send alerts to chat on EKS.
 {{- $sync := dict "automated" (dict "prune" true "selfHeal" true) "syncOptions" (list "CreateNamespace=true" "ServerSideApply=true" "SkipDryRunOnMissingResource=true") "retry" (dict "limit" 20 "backoff" (dict "duration" "15s" "factor" 2 "maxDuration" "2m")) }}
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -40,8 +41,38 @@ spec:
     targetRevision: 92.14.1
     helm:
       valuesObject:
-        # No alert routing yet.
         alertmanager:
+          alertmanagerSpec:
+            resources:
+              requests: {cpu: 10m, memory: 32Mi}
+              limits: {memory: 128Mi}
+            # Routing comes from AlertmanagerConfig resources labelled for it
+            # in this namespace (platform/observability/aws on EKS), and
+            # applies to alerts from every namespace, not just this one.
+            alertmanagerConfigSelector:
+              matchLabels:
+                platform.example.org/alerting: "true"
+            alertmanagerConfigNamespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: monitoring
+            alertmanagerConfigMatcherStrategy:
+              type: None
+        defaultRules:
+          rules:
+            # EKS hides the control plane, and kube-proxy serves metrics only
+            # on localhost, so these would always report themselves as down.
+            etcd: false
+            kubeControllerManager: false
+            kubeSchedulerAlerting: false
+            kubeSchedulerRecording: false
+            kubeProxy: false
+        kubeControllerManager:
+          enabled: false
+        kubeScheduler:
+          enabled: false
+        kubeEtcd:
+          enabled: false
+        kubeProxy:
           enabled: false
         prometheus:
           prometheusSpec:
@@ -100,12 +131,30 @@ spec:
     namespace: monitoring
   syncPolicy:
     {{- toYaml $sync | nindent 4 }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: alerts
+  namespace: argocd
+spec:
+  project: platform
+  source:
+    repoURL: {{ .Values.repoURL }}
+    targetRevision: {{ .Values.targetRevision }}
+    path: platform/observability/alerts
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    {{- toYaml $sync | nindent 4 }}
 {{- if .Values.aws.enabled }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: grafana-access
+  # Grafana's public route and GitHub login, and where alerts are sent.
+  name: observability-aws
   namespace: argocd
 spec:
   project: platform

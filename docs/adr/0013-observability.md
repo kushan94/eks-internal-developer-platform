@@ -8,7 +8,7 @@ Developers can create services, but can't see how they behave: CPU, memory, rest
 ## Decision
 - **metrics-server** on every cluster, for `kubectl top` and the CPU and memory columns in Backstage's Kubernetes tab.
 - **kube-prometheus-stack** (Prometheus Operator, Prometheus, Grafana, kube-state-metrics, node-exporter) on every cluster.
-  - Alertmanager is off until alerts have somewhere to go.
+  - Alertmanager is off until alerts have somewhere to go. ([ADR 0014](0014-alerting.md) turns it on.)
   - Prometheus keeps 2 days on an emptyDir, with a 1.5 GiB memory limit.
   - It picks up `PodMonitor`s and `ServiceMonitor`s from every namespace.
 - **Service metrics:** `spec.metrics` on a `WebService` (`path`, and `port` if it differs from the service port) makes the composition add a named container port and a `PodMonitor`. Kubernetes runtime only.
