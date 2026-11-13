@@ -97,8 +97,8 @@ Team namespaces, which Argo CD creates from `workloads/` and `apps/`, enforce:
 
 WebServices meet these by default. If an image names its user (such as `USER app`) instead of numbering it, set `runAsUser`. When a rule rejects a service, `kubectl get webservice` shows `SYNCED=False` and the condition says which rule and why. `make test` checks the policies against sample pods. See [ADR 0012](docs/adr/0012-guardrails.md).
 
-## Metrics, dashboards and alerts
-Every cluster runs metrics-server, Prometheus, Grafana and Alertmanager. If a service serves Prometheus metrics, say where:
+## Metrics, logs, dashboards and alerts
+Every cluster runs metrics-server, Prometheus, Grafana and Alertmanager, and Loki and Alloy for logs. If a service serves Prometheus metrics, say where:
 
 ```yaml
 spec:
@@ -106,7 +106,7 @@ spec:
     path: /metrics   # and port, if it isn't the service's port
 ```
 
-The `WebService` dashboard shows any service's pods, CPU, memory, restarts and scrape health, including its in-cluster database. Each service's Backstage page links to it. On EKS, Grafana is at `https://grafana.idp.skyforgelab.cloud` with GitHub login, for the users listed in `grafanaAdmins` in [values.yaml](gitops/root/values.yaml). On kind, run `kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80`, and get the admin password from the `kube-prometheus-stack-grafana` secret. See [ADR 0013](docs/adr/0013-observability.md).
+The `WebService` dashboard shows any service's pods, CPU, memory, restarts, scrape health and logs, including its in-cluster database. Logs are kept for 7 days, in S3 on EKS, so they outlive the nightly destroy; see [ADR 0019](docs/adr/0019-logs.md). Each service's Backstage page links to it. On EKS, Grafana is at `https://grafana.idp.skyforgelab.cloud` with GitHub login, for the users listed in `grafanaAdmins` in [values.yaml](gitops/root/values.yaml). On kind, run `kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80`, and get the admin password from the `kube-prometheus-stack-grafana` secret. See [ADR 0013](docs/adr/0013-observability.md).
 
 One-time Grafana login setup for EKS:
 1. **Create a GitHub OAuth app:** GitHub → Settings → Developer settings → OAuth Apps → New. Use homepage `https://grafana.idp.skyforgelab.cloud` and callback `https://grafana.idp.skyforgelab.cloud/login/github`, then generate a client secret.
@@ -283,6 +283,7 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 | provider-sql | 0.16.2 |
 | CloudNativePG chart | 0.29.1 (operator 1.30.1) |
 | kube-prometheus-stack chart | 92.14.1 (Prometheus Operator 0.94.2) |
+| Loki chart / Alloy chart | 7.5.0 (Loki 3.6.16) / 1.15.0 (Alloy 1.21.3) |
 | metrics-server chart | 3.14.0 (metrics-server 0.9.0) |
 | Karpenter | 1.15.1 |
 
@@ -304,6 +305,7 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0016: A production profile for availability, and spread for every service](docs/adr/0016-availability-profile.md)
 - [ADR 0017: RDS backups that survive the nightly destroy, and a restore drill](docs/adr/0017-rds-backups.md)
 - [ADR 0018: Back up in-cluster databases as EBS snapshots](docs/adr/0018-cloudnativepg-backups.md)
+- [ADR 0019: Logs for every service with Loki and Alloy](docs/adr/0019-logs.md)
 
 ## License
 [MIT](LICENSE)
