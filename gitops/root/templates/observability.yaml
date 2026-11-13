@@ -234,6 +234,57 @@ spec:
   syncPolicy:
     {{- toYaml $sync | nindent 4 }}
 ---
+# OpenCost prices each container from what it's allocated and what its node
+# costs: AWS's public prices for the node type on EKS, defaults on kind. It
+# reads from and writes to the platform's Prometheus; the cost per service is
+# a recording rule in platform/observability/alerts.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: opencost
+  namespace: argocd
+spec:
+  project: platform
+  source:
+    repoURL: https://opencost.github.io/opencost-helm-chart
+    chart: opencost
+    targetRevision: 2.5.33
+    helm:
+      valuesObject:
+        opencost:
+          exporter:
+            defaultClusterId: {{ .Values.clusterName }}
+            # OpenCost writes price data to /var/configs, and the container's own
+            # filesystem is read-only. Without this it has no prices at all.
+            extraVolumeMounts:
+              - name: configs
+                mountPath: /var/configs
+          prometheus:
+            internal:
+              enabled: true
+              serviceName: kube-prometheus-stack-prometheus
+              namespaceName: monitoring
+              port: 9090
+          metrics:
+            serviceMonitor:
+              enabled: true
+            # By default OpenCost also publishes its own copy of kube-state-metrics'
+            # metrics, including kube_pod_labels. Two copies make every join on pod
+            # labels ambiguous, which breaks the alerts and the cost rule.
+            kubeStateMetrics:
+              emitKsmV1Metrics: false
+          # Grafana shows cost instead.
+          ui:
+            enabled: false
+        extraVolumes:
+          - name: configs
+            emptyDir: {}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    {{- toYaml $sync | nindent 4 }}
+---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:

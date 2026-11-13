@@ -93,3 +93,49 @@ tests:
             exp_annotations:
               summary: "demo-visits in demo-prod has no ready pods."
               dashboard: "https://grafana.idp.skyforgelab.cloud/d/webservice/webservice?var-service=demo-visits&var-environment=prod"
+
+  # Cost: visits in prod (app + database on n1) and dev (app on n2). A platform
+  # pod without a service label isn't counted.
+  - interval: 1m
+    input_series:
+      - series: 'node_cpu_hourly_cost{node="n1", instance="n1", instance_type="m7i-flex.large"}'
+        values: "0.04x5"
+      - series: 'node_ram_hourly_cost{node="n1", instance="n1", instance_type="m7i-flex.large"}'
+        values: "0.005x5"
+      - series: 'node_cpu_hourly_cost{node="n2", instance="n2", instance_type="t3.medium"}'
+        values: "0.02x5"
+      - series: 'node_ram_hourly_cost{node="n2", instance="n2", instance_type="t3.medium"}'
+        values: "0.003x5"
+      - series: 'container_cpu_allocation{namespace="demo-prod", pod="visits-a", container="app", node="n1", instance="n1"}'
+        values: "0.5x5"
+      - series: 'container_memory_allocation_bytes{namespace="demo-prod", pod="visits-a", container="app", node="n1", instance="n1"}'
+        values: "1073741824x5"
+      - series: 'container_cpu_allocation{namespace="demo-prod", pod="visits-db-1", container="postgres", node="n1", instance="n1"}'
+        values: "0.1x5"
+      - series: 'container_memory_allocation_bytes{namespace="demo-prod", pod="visits-db-1", container="postgres", node="n1", instance="n1"}'
+        values: "536870912x5"
+      - series: 'container_cpu_allocation{namespace="demo-dev", pod="visits-b", container="app", node="n2", instance="n2"}'
+        values: "0.25x5"
+      - series: 'container_memory_allocation_bytes{namespace="demo-dev", pod="visits-b", container="app", node="n2", instance="n2"}'
+        values: "536870912x5"
+      - series: 'container_cpu_allocation{namespace="monitoring", pod="prometheus-0", container="prometheus", node="n1", instance="n1"}'
+        values: "1x5"
+      - series: 'container_memory_allocation_bytes{namespace="monitoring", pod="prometheus-0", container="prometheus", node="n1", instance="n1"}'
+        values: "2147483648x5"
+      - series: 'kube_pod_labels{namespace="demo-prod", pod="visits-a", label_backstage_io_kubernetes_id="demo-visits", label_platform_example_org_environment="prod"}'
+        values: "1x5"
+      - series: 'kube_pod_labels{namespace="demo-prod", pod="visits-db-1", label_backstage_io_kubernetes_id="demo-visits", label_platform_example_org_environment="prod"}'
+        values: "1x5"
+      - series: 'kube_pod_labels{namespace="demo-dev", pod="visits-b", label_backstage_io_kubernetes_id="demo-visits", label_platform_example_org_environment="dev"}'
+        values: "1x5"
+      - series: 'kube_pod_labels{namespace="monitoring", pod="prometheus-0"}'
+        values: "1x5"
+    promql_expr_test:
+      # Rounded to a hundredth of a cent, so floating point doesn't fail the test.
+      - expr: round(webservice:cost_dollars_per_hour, 0.0001)
+        eval_time: 2m
+        exp_samples:
+          - labels: '{namespace="demo-prod", service="demo-visits", environment="prod"}'
+            value: 0.0315
+          - labels: '{namespace="demo-dev", service="demo-visits", environment="dev"}'
+            value: 0.0065

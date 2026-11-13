@@ -471,6 +471,117 @@ data:
               "expr": "{service=\"$service\", environment=~\"$environment\"}"
             }
           ]
+        },
+        {
+          "type": "stat",
+          "title": "Cost per hour",
+          "description": "CPU and memory the service's containers are allocated, including its in-cluster database, at their nodes' prices. From OpenCost.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 6,
+            "x": 0,
+            "y": 32
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "decimals": 2
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "graphMode": "none"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(webservice:cost_dollars_per_hour{service=\"$service\", environment=~\"$environment\"})"
+            }
+          ]
+        },
+        {
+          "type": "stat",
+          "title": "Monthly estimate",
+          "description": "Cost per hour times 730 hours. Shared costs such as the control plane and RDS aren't included.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 6,
+            "x": 6,
+            "y": 32
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "decimals": 2
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "graphMode": "none"
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "expr": "sum(webservice:cost_dollars_per_hour{service=\"$service\", environment=~\"$environment\"}) * 730"
+            }
+          ]
+        },
+        {
+          "type": "timeseries",
+          "title": "Cost per hour by environment",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 12,
+            "y": 32
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD"
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "prometheus"
+              },
+              "legendFormat": "{{environment}}",
+              "expr": "sum by (environment) (webservice:cost_dollars_per_hour{service=\"$service\", environment=~\"$environment\"})"
+            }
+          ]
         }
       ]
     }

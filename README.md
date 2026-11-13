@@ -158,7 +158,7 @@ spec:
     path: /metrics   # and port, if it isn't the service's port
 ```
 
-The `WebService` dashboard shows any service's pods, CPU, memory, restarts, scrape health and logs, including its in-cluster database. Logs are kept for 7 days, in S3 on EKS, so they outlive the nightly destroy; see [ADR 0019](docs/adr/0019-logs.md). Each service's Backstage page links to it. On EKS, Grafana is at `https://grafana.idp.skyforgelab.cloud` with GitHub login, for the users listed in `grafanaAdmins` in [values.yaml](gitops/root/values.yaml). On kind, run `kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80`, and get the admin password from the `kube-prometheus-stack-grafana` secret. See [ADR 0013](docs/adr/0013-observability.md).
+The `WebService` dashboard shows any service's pods, CPU, memory, restarts, scrape health and logs, including its in-cluster database. Logs are kept for 7 days, in S3 on EKS, so they outlive the nightly destroy; see [ADR 0019](docs/adr/0019-logs.md). It also shows what the service costs per hour and per month, from OpenCost; see [ADR 0025](docs/adr/0025-cost-per-service.md). Each service's Backstage page links to it. On EKS, Grafana is at `https://grafana.idp.skyforgelab.cloud` with GitHub login, for the users listed in `grafanaAdmins` in [values.yaml](gitops/root/values.yaml). On kind, run `kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80`, and get the admin password from the `kube-prometheus-stack-grafana` secret. See [ADR 0013](docs/adr/0013-observability.md).
 
 One-time Grafana login setup for EKS:
 1. **Create a GitHub OAuth app:** GitHub → Settings → Developer settings → OAuth Apps → New. Use homepage `https://grafana.idp.skyforgelab.cloud` and callback `https://grafana.idp.skyforgelab.cloud/login/github`, then generate a client secret.
@@ -234,7 +234,8 @@ colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
 - [ ] **8b. Traffic for ECS:** public URLs for the ECS runtime
 - [x] **9. Guardrails:** Pod Security Admission, Kyverno CEL policies and keyless image signing
 - [x] **10. Metrics:** metrics-server, Prometheus, Grafana with GitHub login, a dashboard per service linked from Backstage, and alerts to chat
-- [ ] **10b. Tracing, cost and scaling:** OpenTelemetry, OpenCost, Karpenter and KEDA
+- [ ] **10b. Tracing, cost and scaling:** OpenCost cost per service and CPU autoscaling are built; OpenTelemetry, Karpenter and KEDA remain
+- [ ] **12. Production hardening:** availability profile, backups and restore drills, logs, network isolation, environments and promotion, self-managed Argo CD *(built and tested offline and on kind; EKS verification pending)*
 - [ ] **11. Article:** publish the write-up
 
 ## Repo access and other repos
@@ -338,6 +339,7 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 | CloudNativePG chart | 0.29.1 (operator 1.30.1) |
 | kube-prometheus-stack chart | 92.14.1 (Prometheus Operator 0.94.2) |
 | Loki chart / Alloy chart | 7.5.0 (Loki 3.6.16) / 1.15.0 (Alloy 1.21.3) |
+| OpenCost chart | 2.5.33 (OpenCost 1.121.3) |
 | metrics-server chart | 3.14.0 (metrics-server 0.9.0) |
 | Karpenter | 1.15.1 |
 
@@ -365,6 +367,7 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0022: Autoscale services on CPU with a HorizontalPodAutoscaler](docs/adr/0022-autoscaling.md)
 - [ADR 0023: Argo CD manages itself and External Secrets after bootstrap](docs/adr/0023-self-managed-argocd.md)
 - [ADR 0024: Limit where services can connect](docs/adr/0024-egress-policies.md)
+- [ADR 0025: Cost per service with OpenCost](docs/adr/0025-cost-per-service.md)
 
 ## License
 [MIT](LICENSE)
