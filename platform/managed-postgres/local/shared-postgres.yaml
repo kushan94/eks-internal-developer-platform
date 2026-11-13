@@ -42,4 +42,7 @@ data:
     # What services connect to, from their own namespaces.
     host: shared-postgres-rw.crossplane-system.svc
     port: 5432
+    # Where the server runs, for services' outbound network policies. On EKS
+    # it's RDS, which they reach in the VPC's address range instead.
+    namespace: crossplane-system
     adminRole: postgres

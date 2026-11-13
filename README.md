@@ -137,6 +137,18 @@ spec:
 
 Callers must be in the same environment, so dev can't call prod. See [ADR 0020](docs/adr/0020-network-policies.md).
 
+Outbound traffic is limited too: a service can reach DNS, its own namespace and its database. For anything else, say so:
+
+```yaml
+spec:
+  allowTo:                  # other teams' services it calls; they list it in allowFrom
+    - team: billing
+      service: invoices
+  allowInternet: true       # public internet, such as external APIs
+```
+
+See [ADR 0024](docs/adr/0024-egress-policies.md).
+
 ## Metrics, logs, dashboards and alerts
 Every cluster runs metrics-server, Prometheus, Grafana and Alertmanager, and Loki and Alloy for logs. If a service serves Prometheus metrics, say where:
 
@@ -352,6 +364,7 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0021: Environments as namespaces, promoted through Git](docs/adr/0021-environments.md)
 - [ADR 0022: Autoscale services on CPU with a HorizontalPodAutoscaler](docs/adr/0022-autoscaling.md)
 - [ADR 0023: Argo CD manages itself and External Secrets after bootstrap](docs/adr/0023-self-managed-argocd.md)
+- [ADR 0024: Limit where services can connect](docs/adr/0024-egress-policies.md)
 
 ## License
 [MIT](LICENSE)

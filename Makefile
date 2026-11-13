@@ -135,6 +135,9 @@ test: ## Render the WebService composition for each runtime, database class, pro
 	! $(CROSSPLANE) render tests/render/xr-allow-from-ecs.yaml \
 		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml \
 		--extra-resources platform/crossplane/aws/environment.example.yaml > /dev/null 2>&1
+	$(CROSSPLANE) render --include-full-xr tests/render/xr-egress.yaml \
+		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml \
+		--extra-resources platform/crossplane/aws/environment.example.yaml > .test/egress.yaml
 	cp platform/crossplane/webservice/provider-sql.yaml .test/schemas/
 	curl -fsSL -o .test/schemas/httproutes.yaml \
 		https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.6.0/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml
@@ -153,12 +156,14 @@ test: ## Render the WebService composition for each runtime, database class, pro
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/environment.yaml
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/autoscaling.yaml
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/allow-from.yaml
+	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/egress.yaml
 	@# The XRD refuses maxReplicas below minReplicas.
 	! $(CROSSPLANE) resource validate --cache-dir .test/cache .test/schemas tests/render/xr-autoscaling-invalid.yaml > /dev/null 2>&1
 	for f in .test/env-*.yaml; do $(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas $$f || exit 1; done
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/db-managed-ecs.yaml
-	@# yq assertions below: put each comparison in its own parentheses. Without them
-	@# "select(...) | A and B" or "x == 1 and y" can parse differently and pass by luck.
+	@# yq assertions below: wrap everything after "select(...) |" in one pair of
+	@# parentheses, and each comparison in its own. "select(...) | (A) and (B)" runs B
+	@# on every document and can pass by luck.
 	@# The production profile runs in-cluster databases as three instances; the study profile as one.
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Cluster") | .spec.instances == 3' .test/db-in-cluster-ha.yaml
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Cluster") | .spec.instances == 1' .test/db-in-cluster.yaml
@@ -166,6 +171,12 @@ test: ## Render the WebService composition for each runtime, database class, pro
 	@# namespace and pod selectors must be in the same entry so both have to match.
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "NetworkPolicy") | (.spec.ingress[1].from[0].namespaceSelector.matchLabels | ((.["platform.example.org/team"] == "shop") and (.["platform.example.org/environment"] == "prod")))' .test/allow-from.yaml
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "NetworkPolicy") | (.spec.ingress[2].from | ((length == 1) and (.[0].podSelector.matchLabels["app.kubernetes.io/name"] == "invoices")))' .test/allow-from.yaml
+	@# Outbound: on kind the managed database is reached in its namespace, on EKS in the
+	@# VPC's range; allowTo is environment-bound; allowInternet keeps private ranges blocked.
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "NetworkPolicy") | (((.spec.egress | length) == 3) and (.spec.egress[2].to[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"] == "crossplane-system"))' .test/db-managed.yaml
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "NetworkPolicy") | ((.spec.egress[2].to[0].ipBlock.cidr == "10.42.0.0/16") and (.spec.egress[2].ports[0].port == 5432))' .test/egress.yaml
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "NetworkPolicy") | ((.spec.egress[3].to[0].namespaceSelector.matchLabels["platform.example.org/environment"] == "prod") and (.spec.egress[3].to[0].podSelector.matchLabels["app.kubernetes.io/name"] == "invoices"))' .test/egress.yaml
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "NetworkPolicy") | (.spec.egress[4].to[0].ipBlock.except | contains(["10.0.0.0/8", "169.254.0.0/16"]))' .test/egress.yaml
 	@# With autoscaling, the HorizontalPodAutoscaler owns the replica count.
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Deployment") | (.spec | has("replicas") | not)' .test/autoscaling.yaml
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "HorizontalPodAutoscaler") | (.spec.minReplicas == 2 and .spec.maxReplicas == 8)' .test/autoscaling.yaml

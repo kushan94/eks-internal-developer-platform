@@ -1,0 +1,21 @@
+# On EKS: a managed database in RDS, a call to billing's invoices, and the
+# public internet, all only from the prod environment.
+apiVersion: platform.example.org/v1alpha1
+kind: WebService
+metadata:
+  name: checkout
+  namespace: shop-prod
+  labels:
+    backstage.io/kubernetes-id: shop-checkout
+    platform.example.org/environment: prod
+spec:
+  runtime: kubernetes
+  image: nginxinc/nginx-unprivileged:1.29-alpine
+  port: 8080
+  replicas: 2
+  database:
+    class: managed
+  allowTo:
+    - team: billing
+      service: invoices
+  allowInternet: true
