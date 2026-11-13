@@ -6,7 +6,6 @@
 set -euo pipefail
 
 NODE_IMAGE="${NODE_IMAGE:-node:22-alpine}"
-KUSTOMIZE_IMAGE="${KUSTOMIZE_IMAGE:-registry.k8s.io/kustomize/kustomize:v5.7.1}"
 YQ_IMAGE="${YQ_IMAGE:-mikefarah/yq:4.47.2}"
 CROSSPLANE="${CROSSPLANE:-crossplane}"
 template=backstage/templates/webservice
@@ -30,7 +29,7 @@ render single skeleton
 render single skeleton-single
 
 for env in dev staging prod; do
-  run "$KUSTOMIZE_IMAGE" build "$out/environments/workloads/team-b/shop/envs/$env" 2>/dev/null > "$out/shop-$env.yaml"
+  kubectl kustomize "$out/environments/workloads/team-b/shop/envs/$env" > "$out/shop-$env.yaml"
   "$CROSSPLANE" resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas "$out/shop-$env.yaml" | tail -n 1
 done
 "$CROSSPLANE" resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas "$out/single/workloads/team-b/shop.yaml" | tail -n 1

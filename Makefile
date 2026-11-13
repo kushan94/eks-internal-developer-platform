@@ -24,7 +24,6 @@ KYVERNO_CLI_IMAGE ?= ghcr.io/kyverno/kyverno-cli:v1.19.2
 YQ_IMAGE ?= mikefarah/yq:4.47.2
 PROMETHEUS_IMAGE ?= prom/prometheus:v3.7.3
 ALLOY_IMAGE ?= grafana/alloy:v1.21.3
-KUSTOMIZE_IMAGE ?= registry.k8s.io/kustomize/kustomize:v5.7.1
 NODE_IMAGE ?= node:22-alpine
 TF_RUN = docker run --rm -v $(CURDIR)/infra/terraform:/workspace -w /workspace $(TF_IMAGE)
 
@@ -122,7 +121,7 @@ test: ## Render the WebService composition for each runtime, database class, pro
 		--extra-resources platform/managed-postgres/local/shared-postgres.yaml > .test/environment.yaml
 	@# Every environment of every service builds, and is a valid WebService.
 	for env in workloads/*/*/envs/*; do \
-		docker run --rm -v $(CURDIR):/repo -w /repo $(KUSTOMIZE_IMAGE) build $$env > .test/env-$$(echo $$env | tr / -).yaml || exit 1; \
+		kubectl kustomize $$env > .test/env-$$(echo $$env | tr / -).yaml || exit 1; \
 	done
 	cp platform/crossplane/webservice/provider-sql.yaml .test/schemas/
 	curl -fsSL -o .test/schemas/httproutes.yaml \
@@ -166,7 +165,7 @@ test: ## Render the WebService composition for each runtime, database class, pro
 	docker run --rm -v $(CURDIR)/.test:/w $(ALLOY_IMAGE) fmt /w/config.alloy > /dev/null
 
 test-template: ## Render the Backstage template with and without environments, build every environment and validate the WebServices (run make test first)
-	NODE_IMAGE=$(NODE_IMAGE) KUSTOMIZE_IMAGE=$(KUSTOMIZE_IMAGE) YQ_IMAGE=$(YQ_IMAGE) CROSSPLANE=$(CROSSPLANE) tests/template/test.sh
+	NODE_IMAGE=$(NODE_IMAGE) YQ_IMAGE=$(YQ_IMAGE) CROSSPLANE=$(CROSSPLANE) tests/template/test.sh
 
 test-db: ## On a running cluster: create both database classes, log in, check isolation and cleanup
 	scripts/test-databases.sh $(KUBE_CONTEXT)
