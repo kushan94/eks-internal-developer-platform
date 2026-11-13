@@ -421,6 +421,12 @@ spec:
               {{- if $ha }}
               affinity:
                 topologyKey: topology.kubernetes.io/zone
+              # Backups as EBS snapshots, taken by the ScheduledBackup below.
+              # Deleting a backup deletes its snapshot.
+              backup:
+                volumeSnapshot:
+                  className: ebs-snapshots
+                  snapshotOwnerReference: backup
               {{- end }}
               # Shows the database pods on the service's Kubernetes tab in Backstage.
               inheritedMetadata:
@@ -434,6 +440,26 @@ spec:
                   memory: 256Mi
                 limits:
                   memory: 512Mi
+            {{- if $ha }}
+            ---
+            # A backup when the database is created, then every 6 hours. The backups
+            # belong to the database, so deleting the WebService deletes them too.
+            apiVersion: postgresql.cnpg.io/v1
+            kind: ScheduledBackup
+            metadata:
+              name: {{ $name }}-db
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: database-backups
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              cluster:
+                name: {{ $name }}-db
+              method: volumeSnapshot
+              # CloudNativePG's schedule has a seconds field.
+              schedule: "0 0 */6 * * *"
+              immediate: true
+              backupOwnerReference: cluster
+            {{- end }}
             {{- else if eq $dbClass "managed" }}
             {{- $providerConfigRef := dict "kind" "ClusterProviderConfig" "name" $pg.providerConfigName }}
             ---

@@ -27,4 +27,4 @@ Both RDS instances, Backstage's and the shared server for managed `WebService` d
 - **Retained backups cost a little.** Each session's backups stay for 7 days, billed as backup storage. They're small at this size.
 - **Instance creation takes a few minutes longer** in production, while RDS takes the first backup.
 - **Recovery time is measured, not assumed.** The drill prints how long the restore took.
-- **In-cluster databases aren't covered yet.** CloudNativePG backups are the next step.
+- **In-cluster databases are covered separately,** in [ADR 0018](0018-cloudnativepg-backups.md).

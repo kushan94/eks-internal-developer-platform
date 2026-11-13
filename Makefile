@@ -117,6 +117,8 @@ test: ## Render the WebService composition for each runtime, database class and 
 		https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.6.0/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml
 	curl -fsSL -o .test/schemas/cnpg-clusters.yaml \
 		https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/v1.30.1/config/crd/bases/postgresql.cnpg.io_clusters.yaml
+	curl -fsSL -o .test/schemas/cnpg-scheduledbackups.yaml \
+		https://raw.githubusercontent.com/cloudnative-pg/cloudnative-pg/v1.30.1/config/crd/bases/postgresql.cnpg.io_scheduledbackups.yaml
 	curl -fsSL -o .test/schemas/podmonitors.yaml \
 		https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.94.2/example/prometheus-operator-crd/monitoring.coreos.com_podmonitors.yaml
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/kubernetes.yaml
@@ -129,6 +131,10 @@ test: ## Render the WebService composition for each runtime, database class and 
 	@# The production profile runs in-cluster databases as three instances; the study profile as one.
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Cluster") | .spec.instances == 3' .test/db-in-cluster-ha.yaml
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Cluster") | .spec.instances == 1' .test/db-in-cluster.yaml
+	@# Only the production profile backs in-cluster databases up, as EBS snapshots.
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Cluster") | .spec.backup.volumeSnapshot.className == "ebs-snapshots"' .test/db-in-cluster-ha.yaml
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "ScheduledBackup") | .spec.method == "volumeSnapshot"' .test/db-in-cluster-ha.yaml
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) ea -e '[select(.kind == "ScheduledBackup")] | length == 0' .test/db-in-cluster.yaml
 	docker run --rm -v $(CURDIR):/repo -w /repo $(KYVERNO_CLI_IMAGE) test tests/policies
 	mkdir -p .test/alerts
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) '.spec' platform/observability/alerts/webservice.yaml > .test/alerts/webservice.yaml
@@ -140,6 +146,9 @@ test-db: ## On a running cluster: create both database classes, log in, check is
 
 rds-restore-drill: ## On EKS with the production profile: restore the shared RDS server to a point in time and check the copy
 	scripts/rds-restore-drill.sh $(KUBE_CONTEXT)
+
+cnpg-restore-drill: ## On EKS with the production profile: back up an in-cluster database as EBS snapshots, restore it and check the copy
+	scripts/cnpg-restore-drill.sh $(KUBE_CONTEXT)
 
 bootstrap: ## Create the Terraform state bucket and GitHub IAM users (once, from your laptop)
 	terraform -chdir=infra/bootstrap init
