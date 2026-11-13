@@ -4,5 +4,5 @@ kind: WebService
 metadata:
   name: visits
 spec:
-  image: ghcr.io/kushan94/idp-visits:abfad8f78730c500a740b68069fd7ae1cd3d083d
+  image: ghcr.io/kushan94/idp-visits:52c8920b44cae7f89409bce4e054961f8d23c606
   replicas: 1
