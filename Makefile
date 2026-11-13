@@ -138,6 +138,9 @@ test: ## Render the WebService composition for each runtime, database class and 
 test-db: ## On a running cluster: create both database classes, log in, check isolation and cleanup
 	scripts/test-databases.sh $(KUBE_CONTEXT)
 
+rds-restore-drill: ## On EKS with the production profile: restore the shared RDS server to a point in time and check the copy
+	scripts/rds-restore-drill.sh $(KUBE_CONTEXT)
+
 bootstrap: ## Create the Terraform state bucket and GitHub IAM users (once, from your laptop)
 	terraform -chdir=infra/bootstrap init
 	terraform -chdir=infra/bootstrap apply
