@@ -1,8 +1,9 @@
 CLUSTER ?= idp-local
 KUBE_CONTEXT ?= kind-$(CLUSTER)
 KUBECTL = kubectl --context $(KUBE_CONTEXT)
-ARGOCD_CHART_VERSION ?= 10.11.6
-ESO_CHART_VERSION ?= 2.14.0
+# Argo CD manages these after the first install; the versions live in gitops/root/values.yaml.
+ARGOCD_CHART_VERSION ?= $(shell awk '/^argocd:/ {f=1} f && /chartVersion:/ {print $$2; exit}' gitops/root/values.yaml)
+ESO_CHART_VERSION ?= $(shell awk '/^externalSecrets:/ {f=1} f && /chartVersion:/ {print $$2; exit}' gitops/root/values.yaml)
 # GitHub account whose repos Argo CD can read with the GitHub App.
 GITHUB_OWNER ?= kushan94
 GIT_IMAGE ?= alpine:3.22
