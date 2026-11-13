@@ -226,6 +226,10 @@ jobs:
       - name: Delete secrets created from Kubernetes
         working-directory: .
         run: scripts/delete-workload-secrets.sh idp
+      # Database snapshots outlive the cluster for 7 days, like RDS's backups.
+      - name: Delete old database snapshots
+        working-directory: .
+        run: scripts/delete-old-snapshots.sh 7
       - name: Destroy
         run: |
           if [ -z "$(terraform state list)" ]; then

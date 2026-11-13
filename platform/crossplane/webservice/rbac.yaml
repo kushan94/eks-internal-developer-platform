@@ -20,7 +20,7 @@ rules:
     verbs: ["*"]
   # In-cluster databases are CloudNativePG clusters.
   - apiGroups: ["postgresql.cnpg.io"]
-    resources: ["clusters"]
+    resources: ["clusters", "scheduledbackups"]
     verbs: ["*"]
   # Services that serve Prometheus metrics get a PodMonitor.
   - apiGroups: ["monitoring.coreos.com"]

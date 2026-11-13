@@ -72,7 +72,7 @@ The container gets `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD` and 
 - **[visits](apps/visits/main.go)** is a small demo app in the `demo` namespace with a managed database. Each page view adds a row and shows the count, the database and the login. On EKS it's at `https://visits-demo.idp.skyforgelab.cloud`.
 - **`make test-db`** runs an end-to-end check against the current cluster, kind or EKS (`make test-db KUBE_CONTEXT=idp`). It creates services with both classes, logs in with each one's environment, checks that one service can't open another's database, deletes them, and confirms the shared server has nothing left. `kubectl get webservice` shows the class, and `status.database` names the host, database and Secret. Deleting the WebService deletes its database. See [ADR 0011](docs/adr/0011-databases.md).
 
-**Backups:** with the production profile, both RDS instances keep 7 days of automated backups, including point-in-time restore, and keep them after the nightly destroy. **`make rds-restore-drill KUBE_CONTEXT=idp-eks`** restores the shared server to a new instance and checks the data is there. See [ADR 0017](docs/adr/0017-rds-backups.md).
+**Backups:** with the production profile, both RDS instances keep 7 days of automated backups, including point-in-time restore, and keep them after the nightly destroy. **`make rds-restore-drill KUBE_CONTEXT=idp-eks`** restores the shared server to a new instance and checks the data is there. See [ADR 0017](docs/adr/0017-rds-backups.md). In-cluster databases are backed up as EBS snapshots when they're created and every 6 hours, and **`make cnpg-restore-drill`** restores one into a new cluster. See [ADR 0018](docs/adr/0018-cloudnativepg-backups.md).
 
 ## Public URLs
 On EKS, add `public: true` to a Kubernetes-runtime WebService to serve it at `https://<name>-<namespace>.idp.skyforgelab.cloud`. Its URL appears in `kubectl get webservice` and in `status.url`. One shared ALB, created from a Gateway API Gateway, serves every public service, and ExternalDNS publishes the hostnames. See [ADR 0009](docs/adr/0009-public-urls.md).
@@ -303,6 +303,7 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0014: Alerts per service, sent to a chat webhook](docs/adr/0014-alerting.md)
 - [ADR 0016: A production profile for availability, and spread for every service](docs/adr/0016-availability-profile.md)
 - [ADR 0017: RDS backups that survive the nightly destroy, and a restore drill](docs/adr/0017-rds-backups.md)
+- [ADR 0018: Back up in-cluster databases as EBS snapshots](docs/adr/0018-cloudnativepg-backups.md)
 
 ## License
 [MIT](LICENSE)

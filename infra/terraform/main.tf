@@ -96,6 +96,8 @@ module "eks" {
     coredns                = {}
     eks-pod-identity-agent = { before_compute = true }
     kube-proxy             = {}
+    # The VolumeSnapshot API, for CloudNativePG backups as EBS snapshots.
+    snapshot-controller = {}
     # Prefix delegation gives each network interface /28 prefixes instead of
     # single IPs, so an m7i-flex.large runs 110 pods instead of 29. Managed
     # node groups read it at creation, which before_compute makes sure of.
