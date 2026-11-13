@@ -1,6 +1,6 @@
 # ADR 0006: Run Terraform from GitHub Actions with access keys
 
-**Status:** Accepted (2026-11-05)
+**Status:** Accepted (2026-11-05). The access keys are replaced by GitHub OIDC roles in [ADR 0015](0015-paid-plan-and-github-oidc.md); the rest still applies.
 
 ## Context
 Infrastructure changes should be reviewed and applied the same way every time, not from a laptop. GitHub's usual keyless sign-in to AWS needs an IAM OIDC provider, which the AWS Free plan denies. The repo is public, so Actions logs are public too.

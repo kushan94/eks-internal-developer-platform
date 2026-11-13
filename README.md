@@ -232,17 +232,17 @@ Tick **enable_eks** when running the workflow to include the EKS cluster. Before
 One-time setup, from your laptop after `aws login`:
 
 ```sh
-make bootstrap     # S3 state bucket and the github-plan and github-apply IAM users
+make bootstrap     # S3 state bucket, and the GitHub OIDC provider and CI roles
 make github-setup  # GitHub environments and secrets, from the bootstrap outputs
 make tf-init       # Point your local Terraform at the same state
 ```
 
-The bootstrap stack's state stays in `infra/bootstrap/terraform.tfstate`. It holds the access keys, so it is gitignored. Keep it safe.
+The bootstrap stack's state stays in `infra/bootstrap/terraform.tfstate`. It's gitignored, because it holds account details. Workflows sign in to AWS through GitHub OIDC, so there are no access keys. See [ADR 0015](docs/adr/0015-paid-plan-and-github-oidc.md).
 
 ## EKS sessions
 `make tf-validate` runs Terraform in Docker and does not touch AWS. Creating real resources needs the AWS CLI, Terraform and AWS credentials, and it costs money.
 
-The account is on the AWS Free plan in eu-north-1. The Free plan denies Spot instances, OIDC providers and `ec2:CreateFleet`, and only allows Free Tier-eligible instance types, so this setup uses on-demand `m7i-flex.large` nodes and Pod Identity, and can't use Karpenter or EKS Auto Mode. See [ADR 0003](docs/adr/0003-local-first-ephemeral-eks.md).
+The account is in eu-north-1. It was built on the AWS Free plan, which denies Spot instances, OIDC providers and `ec2:CreateFleet`, and only allows Free Tier-eligible instance types. That's why it uses on-demand `m7i-flex.large` nodes and Pod Identity, and not Karpenter or EKS Auto Mode. See [ADR 0003](docs/adr/0003-local-first-ephemeral-eks.md). The account has since moved to the Paid plan, which lifts those limits; see [ADR 0015](docs/adr/0015-paid-plan-and-github-oidc.md).
 
 Terraform always creates the VPC, a NAT gateway and the ECS cluster, which cost about $0.05 an hour. Setting `enable_eks=true` adds the EKS cluster, two on-demand nodes and the Pod Identity role for Crossplane, for about $0.38 an hour in total, including the VPC runner. A `$50` monthly budget alert, named `idp-monthly`, excludes credits.
 
@@ -288,7 +288,7 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0003: Build locally first and keep EKS ephemeral](docs/adr/0003-local-first-ephemeral-eks.md)
 - [ADR 0004: Structure GitOps with a root application](docs/adr/0004-gitops-structure.md)
 - [ADR 0005: Offer Kubernetes and ECS Fargate behind one API](docs/adr/0005-kubernetes-and-ecs-runtimes.md)
-- [ADR 0006: Run Terraform from GitHub Actions with access keys](docs/adr/0006-infrastructure-pipeline.md)
+- [ADR 0006: Run Terraform from GitHub Actions with access keys](docs/adr/0006-infrastructure-pipeline.md) (keys replaced by ADR 0015)
 - [ADR 0007: Give Argo CD repo access through a GitHub App](docs/adr/0007-argocd-repo-access.md)
 - [ADR 0008: Set up clusters from a GitHub runner inside the VPC](docs/adr/0008-vpc-runner.md)
 - [ADR 0009: Public URLs through Gateway API and a Route 53 subdomain](docs/adr/0009-public-urls.md)
@@ -297,6 +297,7 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0012: Guardrails with Pod Security Admission, Kyverno and signed images](docs/adr/0012-guardrails.md)
 - [ADR 0013: Metrics with Prometheus, Grafana and one dashboard per service](docs/adr/0013-observability.md)
 - [ADR 0014: Alerts per service, sent to a chat webhook](docs/adr/0014-alerting.md)
+- [ADR 0015: Move to the Paid plan, and sign CI in to AWS through GitHub OIDC](docs/adr/0015-paid-plan-and-github-oidc.md)
 
 ## License
 [MIT](LICENSE)

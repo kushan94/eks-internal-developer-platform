@@ -64,6 +64,10 @@ jobs:
       (github.event_name == 'workflow_dispatch' && (inputs.action == 'plan' || inputs.action == 'apply'))
     runs-on: ubuntu-latest
     environment: aws-plan
+    # Only jobs that sign in to AWS can request an OIDC token.
+    permissions:
+      contents: read
+      id-token: write
     env:
       TF_VAR_region: eu-north-1
       TF_VAR_allowed_cidrs: '["${{ secrets.ALLOWED_CIDR }}"]'
@@ -80,8 +84,7 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           aws-region: ${{ env.AWS_REGION }}
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           mask-aws-account-id: true
       - name: Check secrets
         env:
@@ -121,6 +124,10 @@ jobs:
     runs-on: ubuntu-latest
     # Requires approval in GitHub, after the plan job's summary shows what will change.
     environment: aws-apply
+    # Only jobs that sign in to AWS can request an OIDC token.
+    permissions:
+      contents: read
+      id-token: write
     env:
       TF_VAR_region: eu-north-1
       TF_VAR_allowed_cidrs: '["${{ secrets.ALLOWED_CIDR }}"]'
@@ -137,8 +144,7 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           aws-region: ${{ env.AWS_REGION }}
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           mask-aws-account-id: true
       - name: Check secrets
         env:
@@ -171,6 +177,10 @@ jobs:
     runs-on: ubuntu-latest
     # The nightly run uses an environment without approval, limited to main.
     environment: ${{ github.event_name == 'schedule' && 'aws-destroy' || 'aws-apply' }}
+    # Only jobs that sign in to AWS can request an OIDC token.
+    permissions:
+      contents: read
+      id-token: write
     env:
       TF_VAR_region: eu-north-1
       TF_VAR_allowed_cidrs: '["${{ secrets.ALLOWED_CIDR }}"]'
@@ -188,8 +198,7 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           aws-region: ${{ env.AWS_REGION }}
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           mask-aws-account-id: true
       - name: Check secrets
         env:

@@ -52,7 +52,7 @@ resource "aws_iam_role" "github" {
   assume_role_policy = data.aws_iam_policy_document.github_trust[each.key].json
 }
 
-# Same permissions as the IAM users they replace.
+# Same permissions the CI IAM users had before OIDC.
 resource "aws_iam_role_policy_attachment" "github_plan" {
   role       = aws_iam_role.github["plan"].name
   policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
