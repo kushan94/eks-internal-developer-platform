@@ -195,6 +195,8 @@ Argo CD reads **commits**, not your working tree, so uncommitted changes have no
 | Add a team or service | Use the Backstage template, or add a file under `workloads/<namespace>/` |
 | Change a platform API | Edit `platform/crossplane/webservice/` |
 | Add a platform component | Add an application to `gitops/root/templates/` |
+| Upgrade Argo CD or External Secrets | Change `argocd.chartVersion` or `externalSecrets.chartVersion` in `gitops/root/values.yaml`; Argo CD upgrades itself |
+| Promote a service | Run the Promote workflow, then merge its pull request |
 
 Locally, Argo CD reads this repo from a Git server on the kind network and follows the branch you have checked out. To use a hosted repo instead, run `make gitops REPO_URL=https://github.com/kushan94/eks-internal-developer-platform.git`.
 
@@ -349,6 +351,7 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0020: Isolate every service's inbound traffic with NetworkPolicies](docs/adr/0020-network-policies.md)
 - [ADR 0021: Environments as namespaces, promoted through Git](docs/adr/0021-environments.md)
 - [ADR 0022: Autoscale services on CPU with a HorizontalPodAutoscaler](docs/adr/0022-autoscaling.md)
+- [ADR 0023: Argo CD manages itself and External Secrets after bootstrap](docs/adr/0023-self-managed-argocd.md)
 
 ## License
 [MIT](LICENSE)

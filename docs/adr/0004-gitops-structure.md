@@ -15,5 +15,5 @@ Argo CD should deliver the whole platform from Git, with as little applied by ha
 ## Consequences
 - A new service only needs a new file in a new or existing folder, which is simple for a Backstage template to generate.
 - Applications may show errors briefly while dependencies are installing, until a retry succeeds.
-- Argo CD is not managed by Argo CD yet, so its upgrades are still manual.
+- Argo CD is not managed by Argo CD yet, so its upgrades are still manual. ([ADR 0023](0023-self-managed-argocd.md) changes this.)
 - Removing a workload folder leaves its namespace behind.
