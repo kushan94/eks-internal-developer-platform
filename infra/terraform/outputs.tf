@@ -17,11 +17,13 @@ output "aws_platform_environment" {
     data = merge(
       {
         aws = {
-          region               = var.region
-          ecsClusterName       = aws_ecs_cluster.this.name
-          vpcId                = module.vpc.vpc_id
-          vpcCidr              = module.vpc.vpc_cidr_block
-          subnetIds            = module.vpc.private_subnets
+          region         = var.region
+          ecsClusterName = aws_ecs_cluster.this.name
+          vpcId          = module.vpc.vpc_id
+          vpcCidr        = module.vpc.vpc_cidr_block
+          subnetIds      = module.vpc.private_subnets
+          # Where the load balancer's traffic to public services comes from.
+          publicSubnetCidrs    = module.vpc.public_subnets_cidr_blocks
           taskExecutionRoleArn = aws_iam_role.ecs_task_execution.arn
         }
         # Makes in-cluster databases run three instances across AZs.

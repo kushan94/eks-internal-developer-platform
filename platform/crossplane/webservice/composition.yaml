@@ -198,6 +198,40 @@ spec:
                 matchLabels:
                   app.kubernetes.io/name: {{ $name }}
             {{- end }}
+            {{- $publicCidrs := dig "aws" "publicSubnetCidrs" list $env }}
+            ---
+            # Only the service's own namespace, Prometheus and, for public services,
+            # the load balancer can reach its pods. Other teams' services can't.
+            apiVersion: networking.k8s.io/v1
+            kind: NetworkPolicy
+            metadata:
+              name: {{ $name }}
+              labels:
+                backstage.io/kubernetes-id: {{ $backstageId }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: network-policy
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              podSelector:
+                matchLabels:
+                  app.kubernetes.io/name: {{ $name }}
+              policyTypes: [Ingress]
+              ingress:
+                - from:
+                    - podSelector: {}
+                    - namespaceSelector:
+                        matchLabels:
+                          kubernetes.io/metadata.name: monitoring
+                {{- if and $xr.spec.public $publicCidrs }}
+                # The ALB sends traffic straight to pod IPs from the public subnets.
+                - from:
+                    {{- range $publicCidrs }}
+                    - ipBlock:
+                        cidr: {{ . }}
+                    {{- end }}
+                  ports:
+                    - port: {{ $xr.spec.port }}
+                {{- end }}
             {{- if $metricsPortName }}
             ---
             # Prometheus finds monitors in every namespace.
@@ -440,6 +474,32 @@ spec:
                   memory: 256Mi
                 limits:
                   memory: 512Mi
+            ---
+            # The database accepts connections from its own namespace, the
+            # CloudNativePG operator and Prometheus.
+            apiVersion: networking.k8s.io/v1
+            kind: NetworkPolicy
+            metadata:
+              name: {{ $name }}-db
+              labels:
+                backstage.io/kubernetes-id: {{ $backstageId }}
+              annotations:
+                gotemplating.fn.crossplane.io/composition-resource-name: database-network-policy
+                gotemplating.fn.crossplane.io/ready: "True"
+            spec:
+              podSelector:
+                matchLabels:
+                  cnpg.io/cluster: {{ $name }}-db
+              policyTypes: [Ingress]
+              ingress:
+                - from:
+                    - podSelector: {}
+                    - namespaceSelector:
+                        matchLabels:
+                          kubernetes.io/metadata.name: cnpg-system
+                    - namespaceSelector:
+                        matchLabels:
+                          kubernetes.io/metadata.name: monitoring
             {{- if $ha }}
             ---
             # A backup when the database is created, then every 6 hours. The backups

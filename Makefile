@@ -98,9 +98,11 @@ test: ## Render the WebService composition for each runtime, database class and 
 	$(CROSSPLANE) render --include-full-xr tests/render/xr-ecs.yaml \
 		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml \
 		--extra-resources platform/crossplane/aws/environment.example.yaml > .test/ecs.yaml
+	@# With the AWS example settings too, so the load balancer's subnets are known.
+	{ cat platform/crossplane/webservice/environment.yaml; echo ---; cat platform/crossplane/aws/environment.example.yaml; } > .test/environment-public.yaml
 	$(CROSSPLANE) render --include-full-xr tests/render/xr-public.yaml \
 		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml \
-		--extra-resources platform/crossplane/webservice/environment.yaml > .test/public.yaml
+		--extra-resources .test/environment-public.yaml > .test/public.yaml
 	$(CROSSPLANE) render --include-full-xr tests/render/xr-db-in-cluster.yaml \
 		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml > .test/db-in-cluster.yaml
 	$(CROSSPLANE) render --include-full-xr tests/render/xr-db-in-cluster.yaml \
@@ -132,6 +134,10 @@ test: ## Render the WebService composition for each runtime, database class and 
 	@# The production profile runs in-cluster databases as three instances; the study profile as one.
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Cluster") | .spec.instances == 3' .test/db-in-cluster-ha.yaml
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Cluster") | .spec.instances == 1' .test/db-in-cluster.yaml
+	@# Every service is isolated; public ones also let in the load balancer's subnets.
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "NetworkPolicy") | .spec.ingress | length == 1' .test/kubernetes.yaml
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "NetworkPolicy") | .spec.ingress[1].from[0].ipBlock.cidr == "10.42.128.0/20"' .test/public.yaml
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "NetworkPolicy" and .metadata.name == "catalog-db") | .spec.podSelector.matchLabels["cnpg.io/cluster"] == "catalog-db"' .test/db-in-cluster.yaml
 	@# Only the production profile backs in-cluster databases up, as EBS snapshots.
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Cluster") | .spec.backup.volumeSnapshot.className == "ebs-snapshots"' .test/db-in-cluster-ha.yaml
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "ScheduledBackup") | .spec.method == "volumeSnapshot"' .test/db-in-cluster-ha.yaml

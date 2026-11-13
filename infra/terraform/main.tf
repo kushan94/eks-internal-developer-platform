@@ -101,10 +101,13 @@ module "eks" {
     # Prefix delegation gives each network interface /28 prefixes instead of
     # single IPs, so an m7i-flex.large runs 110 pods instead of 29. Managed
     # node groups read it at creation, which before_compute makes sure of.
+    # enableNetworkPolicy makes the CNI enforce NetworkPolicies, which it
+    # otherwise ignores without saying so.
     vpc-cni = {
       before_compute = true
       configuration_values = jsonencode({
-        env = { ENABLE_PREFIX_DELEGATION = "true" }
+        enableNetworkPolicy = "true"
+        env                 = { ENABLE_PREFIX_DELEGATION = "true" }
       })
     }
     # The association is part of the add-on, so the driver never starts without AWS access.

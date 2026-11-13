@@ -14,6 +14,9 @@ data:
       - subnet-0123456789abcdef0
       - subnet-0fedcba9876543210
     taskExecutionRoleArn: arn:aws:iam::111122223333:role/idp-ecs-task-execution
+    publicSubnetCidrs:
+      - 10.42.128.0/20
+      - 10.42.144.0/20
   # true with Terraform's production profile: in-cluster databases run three instances.
   highAvailability: false
   # Only on EKS: the shared RDS instance for managed databases.
