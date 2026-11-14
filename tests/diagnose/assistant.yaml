@@ -1,0 +1,47 @@
+# The cluster assistant as the fault tests run it: a plain Deployment using the
+# same read-only role the platform gives it (platform/cluster-assistant/rbac.yaml).
+apiVersion: v1
+kind: Namespace
+metadata: {name: cluster-assistant}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: cluster-assistant, namespace: cluster-assistant}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: cluster-assistant}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: cluster-assistant}
+subjects: [{kind: ServiceAccount, name: cluster-assistant, namespace: cluster-assistant}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: cluster-assistant, namespace: cluster-assistant}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: cluster-assistant}}
+  template:
+    metadata: {labels: {app: cluster-assistant}}
+    spec:
+      serviceAccountName: cluster-assistant
+      containers:
+        - name: app
+          image: cluster-assistant:eval
+          imagePullPolicy: Never
+          ports: [{containerPort: 8080}]
+          env:
+            - name: ANTHROPIC_API_KEY
+              valueFrom: {secretKeyRef: {name: anthropic, key: api-key, optional: true}}
+          readinessProbe: {httpGet: {path: /healthz, port: 8080}}
+          securityContext:
+            runAsNonRoot: true
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: cluster-assistant, namespace: cluster-assistant}
+spec:
+  selector: {app: cluster-assistant}
+  ports: [{port: 8080}]

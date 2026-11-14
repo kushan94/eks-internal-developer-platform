@@ -26,6 +26,7 @@ YQ_IMAGE ?= mikefarah/yq:4.47.2
 PROMETHEUS_IMAGE ?= prom/prometheus:v3.7.3
 ALLOY_IMAGE ?= grafana/alloy:v1.21.3
 NODE_IMAGE ?= node:22-alpine
+GO_IMAGE ?= golang:1.27.3-alpine
 TF_RUN = docker run --rm -v $(CURDIR)/infra/terraform:/workspace -w /workspace $(TF_IMAGE)
 
 .PHONY: local-up local-down cluster argocd argocd-backstage-token external-secrets platform-bootstrap wait-apps local-git gitops demo status backstage aws-environment test tf-validate tf-init bootstrap github-setup
@@ -202,6 +203,12 @@ test: ## Render the WebService composition for each runtime, database class, pro
 
 test-template: ## Render the Backstage template with and without environments, build every environment and validate the WebServices (run make test first)
 	NODE_IMAGE=$(NODE_IMAGE) YQ_IMAGE=$(YQ_IMAGE) CROSSPLANE=$(CROSSPLANE) tests/template/test.sh
+
+test-assistant: ## Vet and unit test the cluster assistant (no cluster, no API key)
+	docker run --rm -v $(CURDIR)/apps/cluster-assistant:/src -w /src $(GO_IMAGE) sh -c 'test -z "$$(gofmt -l .)" && go vet ./... && go test -count=1 ./...'
+
+test-diagnose: ## On a throwaway kind cluster: break workloads on purpose and check the assistant's tools show the cause (no API key). Run scripts/diagnose-eval.sh without --evidence-only to test the model too
+	scripts/diagnose-eval.sh --evidence-only
 
 test-db: ## On a running cluster: create both database classes, log in, check isolation and cleanup
 	scripts/test-databases.sh $(KUBE_CONTEXT)

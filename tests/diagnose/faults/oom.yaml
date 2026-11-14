@@ -1,0 +1,19 @@
+# expect: OOMKilled
+apiVersion: v1
+kind: Namespace
+metadata: {name: fault-oom}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: web, namespace: fault-oom}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app.kubernetes.io/name: web}}
+  template:
+    metadata: {labels: {app.kubernetes.io/name: web}}
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.37
+          command: [sh, -c, 'a=x; while true; do a="$a$a"; done']
+          resources: {limits: {memory: 32Mi}}

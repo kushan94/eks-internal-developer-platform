@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cluster assistant</title>
+<style>
+:root{--fg:#1f2328;--bg:#fff;--muted:#59636e;--line:#d0d7de;--accent:#0969da}
+@media (prefers-color-scheme:dark){:root{--fg:#e6edf3;--bg:#0d1117;--muted:#9198a1;--line:#30363d;--accent:#4493f8}}
+body{font-family:system-ui,sans-serif;max-width:46rem;margin:2rem auto;padding:0 1rem;color:var(--fg);background:var(--bg);line-height:1.5}
+h1{font-size:1.5rem}label{display:block;margin:.8rem 0 .2rem;font-weight:600}
+input,textarea{width:100%;box-sizing:border-box;padding:.5rem;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:6px}
+button{margin-top:1rem;padding:.5rem 1rem;font:inherit;color:#fff;background:var(--accent);border:0;border-radius:6px;cursor:pointer}
+button:disabled{opacity:.6;cursor:wait}
+#answer{white-space:pre-wrap;margin-top:1.5rem}
+details{margin-top:1rem;color:var(--muted)}code{font-size:.9em}
+</style></head><body>
+<h1>Cluster assistant</h1>
+<p>Names a namespace and a service. The assistant reads pods, events, logs and metrics, and says what's wrong. It can't change anything.</p>
+<form id="f">
+<label for="ns">Namespace</label><input id="ns" required placeholder="demo-dev">
+<label for="svc">Service (optional)</label><input id="svc" placeholder="visits">
+<label for="q">What are you seeing? (optional)</label><textarea id="q" rows="2" placeholder="Pods keep restarting"></textarea>
+<button id="go">Diagnose</button>
+</form>
+<div id="answer" aria-live="polite"></div>
+<details id="steps" hidden><summary>What it looked at</summary><ul id="list"></ul></details>
+<script>
+const f=document.getElementById('f'),go=document.getElementById('go'),answer=document.getElementById('answer'),steps=document.getElementById('steps'),list=document.getElementById('list');
+f.addEventListener('submit',async e=>{
+  e.preventDefault();go.disabled=true;steps.hidden=true;list.replaceChildren();answer.textContent='Investigating…';
+  try{
+    const r=await fetch('/api/diagnose',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({namespace:ns.value.trim(),service:svc.value.trim(),question:q.value.trim()})});
+    if(!r.ok){answer.textContent=(await r.text()).trim();return}
+    const d=await r.json();
+    answer.textContent=d.answer||('No answer ('+(d.stopped||'unknown')+').');
+    for(const s of d.steps){const li=document.createElement('li'),c=document.createElement('code');c.textContent=s.tool+' '+s.input+(s.failed?' (failed)':'');li.append(c);list.append(li)}
+    steps.hidden=d.steps.length===0;
+  }catch(err){answer.textContent='Request failed: '+err.message}finally{go.disabled=false}
+});
+</script></body></html>
