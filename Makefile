@@ -210,6 +210,9 @@ test-assistant: ## Vet and unit test the cluster assistant (no cluster, no API k
 test-diagnose: ## On a throwaway kind cluster: break workloads on purpose and check the assistant's tools show the cause (no API key). Run scripts/diagnose-eval.sh without --evidence-only to test the model too
 	scripts/diagnose-eval.sh --evidence-only
 
+test-dashboard: ## Browser tests for the dashboard: every tab, deep links, keyboard, the assistant panel. Start scripts/dashboard-demo.sh first
+	cd tests/dashboard && npm install --silent --no-audit --no-fund && node tabs.e2e.mjs
+
 test-db: ## On a running cluster: create both database classes, log in, check isolation and cleanup
 	scripts/test-databases.sh $(KUBE_CONTEXT)
 

@@ -13,6 +13,7 @@ import (
 )
 
 type PodRow struct {
+	Namespace  string  `json:"namespace,omitempty"`
 	Name       string  `json:"name"`
 	Status     string  `json:"status"`
 	Severity   string  `json:"severity"`
@@ -61,19 +62,7 @@ func (k *Kube) NamespaceDetail(ctx context.Context, ns string, now time.Time) (*
 	}
 	d := &NamespaceDetail{Name: ns, Pods: []PodRow{}, Deployments: []DeploymentRow{}, WebServices: []WebServiceRow{}, Events: []EventInfo{}}
 	for _, p := range pods {
-		status, sev, detail := podState(p, now)
-		ready := 0
-		for _, c := range p.Status.ContainerStatuses {
-			if c.Ready {
-				ready++
-			}
-		}
-		cpu, mem := podRequests(p)
-		d.Pods = append(d.Pods, PodRow{
-			Name: p.Metadata.Name, Status: status, Severity: severityNames[sev], Detail: detail,
-			Ready: strconv.Itoa(ready) + "/" + strconv.Itoa(len(p.Status.ContainerStatuses)), Restarts: podRestarts(p),
-			Node: p.Spec.NodeName, AgeSeconds: int64(now.Sub(p.Metadata.CreationTimestamp).Seconds()), CPU: cpu, Memory: mem,
-		})
+		d.Pods = append(d.Pods, podRow(p, now))
 	}
 	// Worst first.
 	sort.SliceStable(d.Pods, func(i, j int) bool { return severityRank[d.Pods[i].Severity] > severityRank[d.Pods[j].Severity] })
@@ -205,4 +194,65 @@ func (p *Prometheus) Charts(ctx context.Context, now time.Time) Charts {
 		c.Series = append(c.Series, Series{Name: q.name, Title: q.title, Unit: q.unit, Points: points})
 	}
 	return c
+}
+
+func podRow(p pod, now time.Time) PodRow {
+	status, sev, detail := podState(p, now)
+	ready := 0
+	for _, c := range p.Status.ContainerStatuses {
+		if c.Ready {
+			ready++
+		}
+	}
+	cpu, mem := podRequests(p)
+	return PodRow{
+		Namespace: p.Metadata.Namespace, Name: p.Metadata.Name, Status: status, Severity: severityNames[sev], Detail: detail,
+		Ready: strconv.Itoa(ready) + "/" + strconv.Itoa(len(p.Status.ContainerStatuses)), Restarts: podRestarts(p),
+		Node: p.Spec.NodeName, AgeSeconds: int64(now.Sub(p.Metadata.CreationTimestamp).Seconds()), CPU: cpu, Memory: mem,
+	}
+}
+
+const maxPodRows = 500
+
+type PodList struct {
+	Pods  []PodRow `json:"pods"`
+	Total int      `json:"total"`
+}
+
+// AllPods lists the pods of every namespace, worst first. A very large cluster
+// gets the first maxPodRows, and Total says how many there are.
+func (k *Kube) AllPods(ctx context.Context, now time.Time) (*PodList, error) {
+	pods, err := getList[pod](ctx, k, "/api/v1/pods", nil)
+	if err != nil {
+		return nil, err
+	}
+	l := &PodList{Pods: make([]PodRow, 0, min(len(pods), maxPodRows)), Total: len(pods)}
+	rows := make([]PodRow, 0, len(pods))
+	for _, p := range pods {
+		rows = append(rows, podRow(p, now))
+	}
+	sort.SliceStable(rows, func(i, j int) bool { return severityRank[rows[i].Severity] > severityRank[rows[j].Severity] })
+	l.Pods = append(l.Pods, rows[:min(len(rows), maxPodRows)]...)
+	return l, nil
+}
+
+const maxEventRows = 200
+
+type EventList struct {
+	Events []EventInfo `json:"events"`
+	Total  int         `json:"total"`
+}
+
+// WarningEvents lists the newest warning events in the cluster.
+func (k *Kube) WarningEvents(ctx context.Context) (*EventList, error) {
+	events, err := getList[eventObj](ctx, k, "/api/v1/events", url.Values{"fieldSelector": {"type=Warning"}})
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(events, func(i, j int) bool { return events[i].when().After(events[j].when()) })
+	l := &EventList{Events: []EventInfo{}, Total: len(events)}
+	for _, e := range events[:min(len(events), maxEventRows)] {
+		l.Events = append(l.Events, EventInfo{Time: e.when(), Namespace: e.Metadata.Namespace, Object: e.InvolvedObject.Kind + "/" + e.InvolvedObject.Name, Reason: e.Reason, Message: e.Message, Count: max(e.Count, 1)})
+	}
+	return l, nil
 }

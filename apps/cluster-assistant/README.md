@@ -2,13 +2,14 @@
 
 A dashboard for the cluster, with an assistant that diagnoses problems. Everything is read-only. See [ADR 0026](../../docs/adr/0026-cluster-assistant.md).
 
-**The dashboard** shows what a person checks first when something is wrong:
-- Summary cards: nodes ready, pods healthy, deployments available, Argo CD apps, warning events, restarts.
-- Capacity: CPU, memory and pods requested against what the nodes can allocate, and the Kubernetes versions of the control plane and nodes (with a hint when nodes lag).
-- "Needs attention": every failing or unhealthy pod, node and Argo CD application, worst first, each with a **Diagnose** button.
-- Namespaces as tiles coloured by health. Click one for its WebServices, deployments, pods and warnings.
-- Nodes (zone, instance type, version, utilisation), Argo CD applications, recent warnings.
-- Last-hour charts for CPU, memory, restarts and pods not ready, when `PROMETHEUS_URL` is set.
+**The dashboard** has five tabs. The header shows an "N need attention" pill and a count on each tab, so a problem is visible whichever tab you are on.
+- **Overview:** summary cards, capacity (requested against allocatable), last-hour charts when `PROMETHEUS_URL` is set, everything that needs attention (worst first, each with a **Diagnose** button), and the latest warnings.
+- **Workloads:** namespaces as tiles coloured by health (click one for its WebServices, deployments, pods and warnings), and a searchable list of every pod.
+- **Nodes:** zone, instance type, version and utilisation of each node, and the control plane's version against the nodes' (with a hint when nodes lag).
+- **Delivery:** Argo CD applications.
+- **Events:** every warning event, with the most common reasons as filter chips.
+
+Tabs have their own addresses (`#/nodes`, `#/workloads?ns=shop`), so you can share a link to a view.
 
 **The assistant** takes a namespace, a pod or a service and what you're seeing. A Claude model investigates with read-only tools (pods, events, logs, a fixed list of objects, Prometheus) and the page shows each step as it happens, then the cause, the evidence and the fix. It calls the Claude API, so each diagnosis costs money, and it starts only when you press Run.
 
@@ -22,6 +23,7 @@ ANTHROPIC_API_KEY=... scripts/dashboard-demo.sh   # also lets you run the assist
 ```sh
 make test-assistant      # unit tests, no cluster or API key
 make test-diagnose       # breaks six workloads on kind, checks the tools show each cause (no API key)
+make test-dashboard      # browser tests: every tab, deep links, keyboard, the assistant panel. Needs Chrome and scripts/dashboard-demo.sh running
 ANTHROPIC_API_KEY=... scripts/diagnose-eval.sh   # also asks the model, which costs money
 ```
 

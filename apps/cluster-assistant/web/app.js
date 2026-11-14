@@ -44,7 +44,8 @@ function h(tag, props, ...kids) {
 }
 
 const $ = id => document.getElementById(id);
-const state = { overview: null, charts: null, drawerNS: null, auto: true, timer: null, abort: null, opener: null };
+const TABS = ['overview', 'workloads', 'nodes', 'delivery', 'events'];
+const state = { overview: null, charts: null, pods: null, events: null, tab: 'overview', drawerNS: null, auto: true, timer: null, abort: null, opener: null };
 
 // ---- Formatting --------------------------------------------------------
 
@@ -120,14 +121,17 @@ function renderCapacity(o) {
     gauge('CPU', c.cpu, fmtCPU),
     gauge('Memory', c.memory, fmtBytes),
     gauge('Pods', c.pods, fmtCount, 'Requests, not usage. What the scheduler has set aside.'));
+  if (o.version.hint) $('capacity').append(h('p', { class: 'version warn small' }, o.version.hint));
+}
+
+function renderVersions(o) {
   const v = o.version;
   const nodeVersions = Object.entries(v.nodes || {}).sort();
   $('version').replaceChildren(h('div', { class: 'version' + (v.hint ? ' warn' : '') },
-    h('b', null, 'Versions'),
     h('div', { class: 'v' },
       h('span', { class: 'chip info' }, 'Control plane ' + (v.controlPlane || 'unknown')),
       nodeVersions.map(([ver, n]) => h('span', { class: 'chip' }, n + ' node' + (n > 1 ? 's' : '') + ' ' + ver))),
-    v.hint ? h('p', { class: 'small', style: { marginTop: '8px' } }, v.hint) : null));
+    v.hint ? h('p', { class: 'small', style: { marginTop: '8px' } }, v.hint) : h('p', { class: 'muted small', style: { marginTop: '8px' } }, 'Nodes match the control plane.')));
 }
 
 function sparkline(points) {
@@ -199,7 +203,7 @@ function renderEvents(o) {
     $('events').replaceChildren(h('p', { class: 'empty' }, 'No warning events.'));
     return;
   }
-  $('events').replaceChildren(h('ul', { class: 'list' }, o.events.slice(0, 12).map(e => h('li', { class: 'row-item' },
+  $('events').replaceChildren(h('ul', { class: 'list' }, o.events.slice(0, 6).map(e => h('li', { class: 'row-item' },
     h('div', { class: 'main' },
       h('div', { class: 'title' }, statusChip(e.reason, 'warn'), h('span', { class: 'mono muted' }, e.namespace + ' · ' + e.object), e.count > 1 ? h('span', { class: 'badge' }, '×' + e.count) : null),
       h('p', { class: 'detail', title: e.message }, e.message)),
@@ -221,7 +225,7 @@ function renderNamespaces(o) {
       h('div', { class: 'seg', role: 'img', 'aria-label': `${n.healthy} healthy, ${n.warning} warning, ${n.failing} failing` },
         h('i', { class: 'g', style: { flex: String(n.healthy) } }), h('i', { class: 'w', style: { flex: String(n.warning) } }), h('i', { class: 'e', style: { flex: String(n.failing) } })),
       h('div', { class: 'meta' }, h('span', null, n.pods + (n.pods === 1 ? ' pod' : ' pods') + (n.failing + n.warning ? ' · ' + (n.failing + n.warning) + ' unhealthy' : '')), h('span', null, fmtCPU(n.cpuRequested))),
-      h('div', { class: 'meta' }, h('span', null, fmtBytes(n.memoryRequested)), n.restarts ? h('span', null, n.restarts + ' restarts') : null));
+      h('div', { class: 'meta' }, h('span', null, fmtBytes(n.memoryRequested)), n.restarts ? h('span', null, n.restarts + (n.restarts === 1 ? ' restart' : ' restarts')) : null));
   }));
 }
 
@@ -256,12 +260,90 @@ function renderApps(o) {
     'No Argo CD applications found.');
 }
 
+function renderPods() {
+  const l = state.pods;
+  if (!l) return;
+  const q = $('pod-filter').value.trim().toLowerCase();
+  const only = $('pod-only-problems').checked;
+  const rows = l.pods.filter(p => (!only || p.severity !== 'ok') &&
+    (!q || [p.namespace, p.name, p.status, p.node].some(x => (x || '').toLowerCase().includes(q))));
+  $('pod-count').textContent = rows.length;
+  $('pods-note').textContent = l.total > l.pods.length ? `Showing the ${l.pods.length} worst of ${l.total} pods. Use a namespace tile for the rest.` : '';
+  table($('pods'), ['Pod', 'Status', 'Ready', 'Restarts', 'Node', 'Age', ''],
+    rows.slice(0, 200).map(p => h('tr', null,
+      h('td', null,
+        h('div', { class: 'mono' }, p.name),
+        h('div', { class: 'cell-sub' }, h('button', { class: 'link-btn', type: 'button', onclick: e => openNamespace(p.namespace, e.currentTarget) }, p.namespace),
+          p.detail ? [' · ', h('span', { class: 'clamp', title: p.detail }, p.detail)] : null)),
+      h('td', null, statusChip(p.status)), h('td', { class: 'num' }, p.ready), h('td', { class: 'num' }, p.restarts),
+      h('td', { class: 'mono small' }, p.node || '—'), h('td', { class: 'num' }, age(p.ageSeconds)),
+      h('td', null, p.severity !== 'ok' ? diagnoseButton('Diagnose', { title: 'Pod ' + p.namespace + '/' + p.name, namespace: p.namespace, pod: p.name, question: `The pod shows ${p.status}. ${p.detail || ''}`.trim() }) : null))),
+    'No pods match.');
+}
+
+function renderEventsPage() {
+  const l = state.events;
+  if (!l) return;
+  const q = $('ev-filter').value.trim().toLowerCase();
+  const rows = l.events.filter(e => !q || [e.namespace, e.object, e.reason, e.message].some(x => (x || '').toLowerCase().includes(q)));
+  $('event-count').textContent = rows.length;
+  $('events-note').textContent = l.total > l.events.length ? `Showing the newest ${l.events.length} of ${l.total} warnings.` : '';
+  const counts = {};
+  for (const e of l.events) counts[e.reason] = (counts[e.reason] || 0) + e.count;
+  $('ev-reasons').replaceChildren(...Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([reason, n]) => {
+    const chip = statusChip(reason, 'warn');
+    return h('button', { class: chip.className, type: 'button', 'aria-pressed': String(q === reason.toLowerCase()),
+      onclick: () => { $('ev-filter').value = q === reason.toLowerCase() ? '' : reason; renderEventsPage(); } }, reason + ' · ' + n);
+  }));
+  $('events-all').replaceChildren(rows.length ? h('ul', { class: 'list' }, rows.map(e => h('li', { class: 'row-item' },
+    h('div', { class: 'main' },
+      h('div', { class: 'title' }, statusChip(e.reason, 'warn'), h('span', { class: 'mono muted' }, e.namespace + ' · ' + e.object), e.count > 1 ? h('span', { class: 'badge' }, '×' + e.count) : null),
+      h('p', { class: 'detail', title: e.message }, e.message)),
+    h('span', { class: 'ago' }, ago(e.time))))) : h('p', { class: 'empty' }, 'No events match.'));
+}
+
+async function loadTabData() {
+  try {
+    if (state.tab === 'workloads') { state.pods = await api('/api/pods'); renderPods(); }
+    if (state.tab === 'events') { state.events = await api('/api/events'); renderEventsPage(); }
+  } catch (e) {
+    const target = state.tab === 'workloads' ? $('pods') : $('events-all');
+    target.replaceChildren(h('p', { class: 'empty' }, e.message));
+  }
+}
+
+function setBadge(tab, n, toneName) {
+  const el = $('badge-' + tab);
+  el.hidden = !n;
+  el.textContent = n;
+  el.className = 'tab-badge' + (toneName ? ' ' + toneName : '');
+}
+
+// The header carries the state of the cluster, so a problem is visible from every tab.
+function renderChrome(o) {
+  const errors = o.problems.filter(p => p.severity === 'error').length;
+  const unhealthyPods = o.namespaces.reduce((n, x) => n + x.failing + x.warning, 0);
+  const failingPods = o.namespaces.reduce((n, x) => n + x.failing, 0);
+  const nodeProblems = o.problems.filter(p => p.kind === 'Node');
+  const appProblems = o.problems.filter(p => p.kind === 'Argo CD app');
+  setBadge('overview', o.problems.length, errors ? 'err' : 'warn');
+  setBadge('workloads', unhealthyPods, failingPods ? 'err' : 'warn');
+  setBadge('nodes', nodeProblems.length + (o.version.hint ? 1 : 0), nodeProblems.some(p => p.severity === 'error') ? 'err' : 'warn');
+  setBadge('delivery', appProblems.length, appProblems.some(p => p.severity === 'error') ? 'err' : 'warn');
+  setBadge('events', o.totals.warnings, 'warn');
+  const pill = $('pill');
+  pill.hidden = false;
+  pill.className = 'pill ' + (errors ? 'err' : o.problems.length ? 'warn' : '');
+  pill.replaceChildren(h('span', { class: 'dot' }), o.problems.length ? o.problems.length + ' need attention' : 'All healthy');
+}
+
 function render(o) {
   state.overview = o;
   const unhealthy = o.problems.length;
   $('subtitle').textContent = `${o.version.controlPlane ? 'Kubernetes ' + o.version.controlPlane + ' · ' : ''}${o.totals.nodes.total} nodes · ${o.totals.pods.total} pods · ${o.namespaces.length} namespaces` + (unhealthy ? ` · ${unhealthy} need attention` : '');
-  document.title = (unhealthy ? `(${unhealthy}) ` : '') + 'Cluster dashboard';
-  renderKPIs(o); renderCapacity(o); renderProblems(o); renderEvents(o); renderNamespaces(o); renderNodes(o); renderApps(o);
+  state.unhealthy = unhealthy;
+  updateTitle();
+  renderChrome(o); renderKPIs(o); renderCapacity(o); renderVersions(o); renderProblems(o); renderEvents(o); renderNamespaces(o); renderNodes(o); renderApps(o);
   $('app').setAttribute('aria-busy', 'false');
   $('updated').textContent = 'Updated ' + new Date(o.generatedAt).toLocaleTimeString();
   const banner = $('banner');
@@ -280,6 +362,7 @@ async function refresh() {
     state.charts = c;
     render(o);
     renderCharts(c);
+    loadTabData();
     if (state.drawerNS) loadNamespace(state.drawerNS, false);
   } catch (e) {
     const banner = $('banner');
@@ -316,7 +399,7 @@ function closeDrawer(el) {
 
 function openNamespace(name, opener) {
   state.drawerNS = name;
-  history.replaceState(null, '', '#ns=' + encodeURIComponent(name));
+  history.replaceState(null, '', routeHash(state.tab, name));
   $('drawer-title').textContent = name;
   $('drawer-body').replaceChildren(h('p', { class: 'empty' }, 'Loading…'));
   const btn = $('drawer-diagnose');
@@ -355,7 +438,7 @@ function renderNamespaceDetail(d) {
   sections.push(d.pods.length ? h('div', { class: 'table-wrap' }, h('table', null,
     h('thead', null, h('tr', null, ['Pod', 'Status', 'Ready', 'Restarts', 'Node', 'Age', ''].map(x => h('th', { scope: 'col' }, x)))),
     h('tbody', null, d.pods.map(p => h('tr', null,
-      h('td', null, h('div', { class: 'mono' }, p.name), p.detail ? h('div', { class: 'cell-sub', title: p.detail }, p.detail.slice(0, 120)) : null),
+      h('td', null, h('div', { class: 'mono' }, p.name), p.detail ? h('div', { class: 'cell-sub clamp', title: p.detail }, p.detail) : null),
       h('td', null, statusChip(p.status)), h('td', { class: 'num' }, p.ready), h('td', { class: 'num' }, p.restarts),
       h('td', { class: 'mono small' }, p.node || '—'), h('td', { class: 'num' }, age(p.ageSeconds)),
       h('td', null, p.severity !== 'ok' ? diagnoseButton('Diagnose', { title: 'Pod ' + d.name + '/' + p.name, namespace: d.name, pod: p.name, question: `The pod shows ${p.status}. ${p.detail || ''}`.trim() }) : null)))))) : h('p', { class: 'empty' }, 'No pods.'));
@@ -488,6 +571,58 @@ function markdown(src) {
   return out;
 }
 
+// ---- Tabs and routing --------------------------------------------------
+// The address says where you are: #/nodes, or #/workloads?ns=shop for a
+// namespace open on top. Links to either can be shared.
+
+function routeHash(tab, ns) { return '#/' + tab + (ns ? '?ns=' + encodeURIComponent(ns) : ''); }
+
+function parseRoute() {
+  const legacy = /^#ns=(.+)$/.exec(location.hash);
+  if (legacy) return { tab: 'workloads', ns: decodeURIComponent(legacy[1]) };
+  const m = /^#\/([a-z]+)(?:\?ns=(.+))?$/.exec(location.hash);
+  return { tab: m && TABS.includes(m[1]) ? m[1] : 'overview', ns: m && m[2] ? decodeURIComponent(m[2]) : null };
+}
+
+function showTab(tab) {
+  state.tab = tab;
+  for (const t of TABS) {
+    const selected = t === tab;
+    const button = $('tab-' + t);
+    button.setAttribute('aria-selected', String(selected));
+    button.tabIndex = selected ? 0 : -1;
+    $('panel-' + t).hidden = !selected;
+  }
+  updateTitle();
+}
+
+function updateTitle() {
+  document.title = (state.unhealthy ? `(${state.unhealthy}) ` : '') + 'Cluster dashboard · ' + state.tab[0].toUpperCase() + state.tab.slice(1);
+}
+
+function applyRoute() {
+  const { tab, ns } = parseRoute();
+  showTab(tab);
+  loadTabData();
+  if (ns && state.drawerNS !== ns) openNamespace(ns);
+  else if (!ns && state.drawerNS) { $('drawer-close').click(); }
+}
+
+function initTabs() {
+  const buttons = TABS.map(t => $('tab-' + t));
+  buttons.forEach((b, i) => {
+    b.addEventListener('click', () => { location.hash = routeHash(b.dataset.tab); });
+    b.addEventListener('keydown', e => {
+      const next = { ArrowRight: (i + 1) % buttons.length, ArrowLeft: (i + buttons.length - 1) % buttons.length, Home: 0, End: buttons.length - 1 }[e.key];
+      if (next == null) return;
+      e.preventDefault();
+      buttons[next].focus();
+      location.hash = routeHash(buttons[next].dataset.tab);
+    });
+  });
+  window.addEventListener('hashchange', applyRoute);
+}
+
 // ---- Start -------------------------------------------------------------
 
 function init() {
@@ -499,7 +634,10 @@ function init() {
   $('auto').addEventListener('change', e => { state.auto = e.target.checked; schedule(); });
   $('ns-filter').addEventListener('input', () => state.overview && renderNamespaces(state.overview));
   $('only-problems').addEventListener('change', () => state.overview && renderNamespaces(state.overview));
-  $('drawer-close').addEventListener('click', () => { state.drawerNS = null; history.replaceState(null, '', location.pathname); closeDrawer($('drawer')); });
+  $('pod-filter').addEventListener('input', renderPods);
+  $('pod-only-problems').addEventListener('change', renderPods);
+  $('ev-filter').addEventListener('input', renderEventsPage);
+  $('drawer-close').addEventListener('click', () => { state.drawerNS = null; history.replaceState(null, '', routeHash(state.tab)); closeDrawer($('drawer')); });
   $('assistant-close').addEventListener('click', () => { stopRun(); closeDrawer($('assistant')); });
   $('run').addEventListener('click', runDiagnosis);
   $('stop').addEventListener('click', stopRun);
@@ -509,10 +647,12 @@ function init() {
     if (e.key !== 'Escape') return;
     if (!$('assistant').hidden) $('assistant-close').click(); else if (!$('drawer').hidden) $('drawer-close').click();
   });
+  initTabs();
+  const first = parseRoute();
+  showTab(first.tab);
   refresh();
   schedule();
-  const m = /^#ns=(.+)$/.exec(location.hash);
-  if (m) openNamespace(decodeURIComponent(m[1]));
+  if (first.ns) openNamespace(first.ns);
 }
 
 init();

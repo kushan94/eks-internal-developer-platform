@@ -85,6 +85,8 @@ type server struct {
 	log      *slog.Logger
 	overview cache[*Overview]
 	charts   cache[Charts]
+	pods     cache[*PodList]
+	events   cache[*EventList]
 }
 
 type diagnoseRequest struct {
@@ -121,6 +123,24 @@ func (s *server) handleNamespace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, d)
+}
+
+func (s *server) handlePods(w http.ResponseWriter, r *http.Request) {
+	l, err := s.pods.get(func() (*PodList, error) { return s.kube.AllPods(r.Context(), time.Now()) })
+	if err != nil {
+		http.Error(w, "couldn't read the pods: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, l)
+}
+
+func (s *server) handleEvents(w http.ResponseWriter, r *http.Request) {
+	l, err := s.events.get(func() (*EventList, error) { return s.kube.WarningEvents(r.Context()) })
+	if err != nil {
+		http.Error(w, "couldn't read the events: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, l)
 }
 
 func (s *server) handleCharts(w http.ResponseWriter, r *http.Request) {
@@ -241,11 +261,15 @@ func main() {
 		log:      logger,
 		overview: cache[*Overview]{ttl: 5 * time.Second},
 		charts:   cache[Charts]{ttl: 30 * time.Second},
+		pods:     cache[*PodList]{ttl: 5 * time.Second},
+		events:   cache[*EventList]{ttl: 5 * time.Second},
 	}
 	site, _ := fs.Sub(webFiles, "web")
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/overview", s.handleOverview)
 	mux.HandleFunc("GET /api/namespaces/{ns}", s.handleNamespace)
+	mux.HandleFunc("GET /api/pods", s.handlePods)
+	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("GET /api/charts", s.handleCharts)
 	mux.HandleFunc("POST /api/diagnose", s.handleDiagnose)
 	mux.HandleFunc("POST /api/diagnose/stream", s.handleDiagnoseStream)

@@ -61,6 +61,18 @@ func TestPodState(t *testing.T) {
 	}
 }
 
+func TestRestartCountsUseTheRightPlural(t *testing.T) {
+	crash := func(n string) pod {
+		return mustPod(t, `{"metadata":{"creationTimestamp":"2026-11-14T11:00:00Z"},"status":{"phase":"Running","containerStatuses":[{"name":"a","restartCount":`+n+`,"state":{"waiting":{"reason":"CrashLoopBackOff"}},"lastState":{"terminated":{"reason":"OOMKilled","exitCode":137}}}]}}`)
+	}
+	if _, _, d := podState(crash("1"), now); d != "last exit: OOMKilled, 1 restart" {
+		t.Errorf("one restart: %q", d)
+	}
+	if _, _, d := podState(crash("7"), now); d != "last exit: OOMKilled, 7 restarts" {
+		t.Errorf("seven restarts: %q", d)
+	}
+}
+
 func TestVersionHint(t *testing.T) {
 	for _, c := range []struct {
 		cp    string
@@ -382,6 +394,56 @@ func TestNamespaceEndpointRejectsBadNames(t *testing.T) {
 		mux.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
 		if rec.Code != want {
 			t.Errorf("%s: status %d, want %d", path, rec.Code, want)
+		}
+	}
+}
+
+func TestAllPodsWorstFirstAcrossNamespaces(t *testing.T) {
+	l, err := fakeCluster(t, true).AllPods(context.Background(), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.Total != 4 || len(l.Pods) != 4 {
+		t.Fatalf("total %d, rows %d", l.Total, len(l.Pods))
+	}
+	worst := map[string]bool{"crash-1": true, "stuck-1": true}
+	if !worst[l.Pods[0].Name] || !worst[l.Pods[1].Name] || l.Pods[0].Severity != "error" {
+		t.Errorf("worst pods are not first: %+v", l.Pods)
+	}
+	for _, p := range l.Pods {
+		if p.Namespace == "" {
+			t.Errorf("pod %s has no namespace", p.Name)
+		}
+	}
+	if l.Pods[0].Name == "crash-1" && l.Pods[0].Namespace != "shop" {
+		t.Errorf("namespace: %+v", l.Pods[0])
+	}
+}
+
+func TestWarningEventsAreNewestFirst(t *testing.T) {
+	l, err := fakeCluster(t, true).WarningEvents(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.Total != 2 || len(l.Events) != 2 || l.Events[0].Reason != "FailedScheduling" || l.Events[0].Namespace != "jobs" {
+		t.Errorf("events: %+v", l)
+	}
+}
+
+func TestPodAndEventListsAreNeverNull(t *testing.T) {
+	k := &Kube{base: emptyCluster(t), http: http.DefaultClient, token: func() string { return "" }}
+	pods, err := k.AllPods(context.Background(), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, err := k.WarningEvents(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range []any{pods, events} {
+		b, _ := json.Marshal(v)
+		if strings.Contains(string(b), ":null") {
+			t.Errorf("null in %s", b)
 		}
 	}
 }

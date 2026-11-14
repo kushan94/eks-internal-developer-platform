@@ -159,7 +159,7 @@ func podState(p pod, now time.Time) (status string, sev int, detail string) {
 			}
 			d := w.Message
 			if lastTerminated != "" {
-				d = fmt.Sprintf("last exit: %s, %d restarts", lastTerminated, restarts)
+				d = fmt.Sprintf("last exit: %s, %s", lastTerminated, plural(restarts, "restart"))
 			}
 			return w.Reason, sevError, d
 		}
@@ -188,9 +188,16 @@ func podState(p pod, now time.Time) (status string, sev int, detail string) {
 		return "NotReady", sev, notReadyDetail(p)
 	}
 	if restarts >= 3 {
-		return "Restarting", sevWarning, fmt.Sprintf("%d restarts, last exit: %s", restarts, lastTerminated)
+		return "Restarting", sevWarning, fmt.Sprintf("%s, last exit: %s", plural(restarts, "restart"), lastTerminated)
 	}
 	return "Running", sevOK, ""
+}
+
+func plural(n int, word string) string {
+	if n == 1 {
+		return "1 " + word
+	}
+	return fmt.Sprintf("%d %ss", n, word)
 }
 
 func notReadyDetail(p pod) string {
