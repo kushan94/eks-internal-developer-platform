@@ -1,4 +1,6 @@
 # expect: Insufficient cpu
+# answer: Insufficient cpu|not enough cpu|cpu
+# runbook: pending-or-unschedulable
 apiVersion: v1
 kind: Namespace
 metadata: {name: fault-unschedulable}

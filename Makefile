@@ -204,11 +204,12 @@ test: ## Render the WebService composition for each runtime, database class, pro
 test-template: ## Render the Backstage template with and without environments, build every environment and validate the WebServices (run make test first)
 	NODE_IMAGE=$(NODE_IMAGE) YQ_IMAGE=$(YQ_IMAGE) CROSSPLANE=$(CROSSPLANE) tests/template/test.sh
 
-test-assistant: ## Vet and unit test the cluster assistant (no cluster, no API key)
+test-assistant: ## Check the runbooks against the platform, then vet and unit test the cluster assistant (no cluster, no API key)
+	scripts/check-runbooks.sh
 	docker run --rm -v $(CURDIR)/apps/cluster-assistant:/src -w /src $(GO_IMAGE) sh -c 'test -z "$$(gofmt -l .)" && go vet ./... && go test -count=1 ./...'
 
-test-diagnose: ## On a throwaway kind cluster: break workloads on purpose and check the assistant's tools show the cause (no API key). Run scripts/diagnose-eval.sh without --evidence-only to test the model too
-	scripts/diagnose-eval.sh --evidence-only
+test-diagnose: ## On a throwaway kind cluster: break workloads on purpose, check the assistant's tools show each cause, and dry-run the model comparison against a stand-in (no API key, no cost). scripts/diagnose-eval.sh --compare tests the real model
+	scripts/diagnose-eval.sh --dry-run
 
 test-dashboard: ## Browser tests for the dashboard: every tab, deep links, keyboard, the assistant panel. Start scripts/dashboard-demo.sh first
 	cd tests/dashboard && npm install --silent --no-audit --no-fund && node tabs.e2e.mjs

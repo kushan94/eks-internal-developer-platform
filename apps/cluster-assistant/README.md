@@ -22,9 +22,9 @@ ANTHROPIC_API_KEY=... scripts/dashboard-demo.sh   # also lets you run the assist
 ## Test it
 ```sh
 make test-assistant      # unit tests, no cluster or API key
-make test-diagnose       # breaks six workloads on kind, checks the tools show each cause (no API key)
+make test-diagnose       # breaks seven workloads on kind, checks the tools show each cause, then dry-runs the model comparison against a stand-in API (no key, no cost)
 make test-dashboard      # browser tests: every tab, deep links, keyboard, the assistant panel. Needs Chrome and scripts/dashboard-demo.sh running
-ANTHROPIC_API_KEY=... scripts/diagnose-eval.sh   # also asks the model, which costs money
+ANTHROPIC_API_KEY=... scripts/diagnose-eval.sh --compare   # asks the real model, without and with runbooks. Costs money, capped by EVAL_BUDGET_USD (default 5)
 ```
 
 ## Run it against a cluster you already have
@@ -33,6 +33,13 @@ kubectl proxy &
 KUBE_API_URL=http://127.0.0.1:8001 PROMETHEUS_URL=http://localhost:9090 ANTHROPIC_API_KEY=... go run .
 ```
 Then open http://localhost:8080. `go run . evidence <namespace>` prints what the tools see, without calling the model.
+
+## Runbooks
+The assistant can load **runbooks** from [`runbooks/`](runbooks/): short guides to common failures, written for this platform. They say what the composition sets, which policies apply, how to tell similar causes apart, and what the fix is in Git. It sees only their names and descriptions at first, and loads one when the symptoms match, so the prompt stays small as the set grows. The page shows each load in the timeline.
+
+Current runbooks: `crash-or-oom`, `image-or-admission`, `pending-or-unschedulable`, `missing-secret-or-config`, `blocked-traffic`, `webservice-not-ready`, `argocd-out-of-sync`, `node-problems`, `database-connection`.
+
+To add or change one, edit the file (front matter: `name`, `description`, `tools`), and run `make test-assistant`. It checks the format, that the tools named exist, and, with `scripts/check-runbooks.sh`, that what the runbook says about the platform is still true: the `WebService` fields, the resource sizes, the policy names, and the messages the composition emits. A runbook that goes stale fails the check. `RUNBOOKS=off` runs the assistant without them, to measure what they add.
 
 ## Limits on the assistant
 A diagnosis costs money, so there are limits. The assistant's page shows today's spend against the cap.

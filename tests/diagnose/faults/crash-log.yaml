@@ -1,4 +1,6 @@
 # expect: DATABASE_URL
+# answer: DATABASE_URL
+# runbook: crash-or-oom
 apiVersion: v1
 kind: Namespace
 metadata: {name: fault-crash-log}

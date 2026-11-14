@@ -72,6 +72,15 @@ type Agent struct {
 	// across every model call. Zero means no limit.
 	MaxTotalTokens int64
 	Log            *slog.Logger
+	// System is the system prompt. Empty means the built-in one.
+	System string
+}
+
+func (a *Agent) systemText() string {
+	if a.System != "" {
+		return a.System
+	}
+	return systemPrompt
 }
 
 // Once a diagnosis has used this share of its budget, the next call is the
@@ -128,7 +137,7 @@ func (a *Agent) RunWith(ctx context.Context, prompt string, emit Emit) (Result, 
 		params := anthropic.MessageNewParams{
 			Model:     a.Model,
 			MaxTokens: a.MaxTokens,
-			System:    []anthropic.TextBlockParam{{Text: systemPrompt}},
+			System:    []anthropic.TextBlockParam{{Text: a.systemText()}},
 			Tools:     tools,
 			Messages:  messages,
 		}

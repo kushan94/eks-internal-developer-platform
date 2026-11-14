@@ -1,4 +1,6 @@
 # expect: OOMKilled
+# answer: OOM|out of memory|memory limit|memory
+# runbook: crash-or-oom
 apiVersion: v1
 kind: Namespace
 metadata: {name: fault-oom}

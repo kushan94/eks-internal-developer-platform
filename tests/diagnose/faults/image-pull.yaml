@@ -1,4 +1,6 @@
 # expect: ImagePullBackOff|ErrImagePull
+# answer: ErrImagePull|ImagePullBackOff|image.*(not found|pull)|no-such-tag
+# runbook: image-or-admission
 apiVersion: v1
 kind: Namespace
 metadata: {name: fault-image-pull}

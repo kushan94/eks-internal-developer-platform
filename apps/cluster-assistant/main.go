@@ -353,6 +353,12 @@ func main() {
 		return
 	}
 	prom := &Prometheus{base: os.Getenv("PROMETHEUS_URL"), http: &http.Client{Timeout: 20 * time.Second}}
+	// RUNBOOKS=off runs without them, to measure what they add.
+	tools, system, runbookCount, err := withRunbooks(BuildTools(kube, prom), systemPrompt, os.Getenv("RUNBOOKS") != "off")
+	if err != nil {
+		log.Fatal(err)
+	}
+	logger.Info("runbooks", "count", runbookCount)
 	perHour, _ := strconv.Atoi(env("MAX_DIAGNOSES_PER_HOUR", "30"))
 	dailyCap, _ := strconv.ParseFloat(env("MAX_DAILY_SPEND_USD", "5"), 64)
 	tokenBudget, _ := strconv.ParseInt(env("MAX_TOKENS_PER_DIAGNOSIS", "150000"), 10, 64)
@@ -364,7 +370,8 @@ func main() {
 		agent: &Agent{
 			Model:          env("MODEL", "claude-opus-5-5"),
 			Client:         sdkMessenger{anthropic.NewClient()}, // ANTHROPIC_API_KEY
-			Tools:          BuildTools(kube, prom),
+			Tools:          tools,
+			System:         system,
 			MaxTurns:       12,
 			MaxTokens:      8000,
 			MaxTotalTokens: tokenBudget,
