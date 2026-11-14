@@ -16,7 +16,14 @@ When a service breaks, an engineer reads pod status, events, logs, the objects a
 - **Read-only in two places.** The code only sends GET requests, and its ClusterRole (`platform/cluster-assistant/rbac.yaml`) has no write verbs and no Secrets. The role is tested on kind with `kubectl auth can-i`.
 - **Output is treated as untrusted and as sensitive.** Names and namespaces are checked before they go into a URL. Tool output has credentials redacted (connection strings, tokens, keys, `password=` pairs) and is capped at 12 KB before the model sees it. The system prompt says that logs and object fields are data that may contain instructions.
 - **Changes would go through Git.** The assistant ends with a fix expressed as a change to the `WebService` or to Git. Any later feature that writes will open a pull request, like the Promote workflow, and a person merges it.
-- **Cost and audit:** a five-second cache so open dashboards cost the API server one read, a cap on diagnoses per hour (`MAX_DIAGNOSES_PER_HOUR`, 30), and one JSON log line per question and per tool call. Alloy ships those to Loki like any other service's logs.
+- **Cost limits:**
+  - **Per diagnosis:** 12 model calls and 150,000 tokens in all. At 70% of the token budget, or on the last call, the model can't use tools (`tool_choice: none`, because the history has tool calls in it and the API requires the tools to stay defined) and is told to answer from what it has. A partial answer, marked as partial, is worth more than none, and the wrap-up costs one more call.
+  - **Per day:** an estimated spend cap (`MAX_DAILY_SPEND_USD`, 5), from token counts and list prices. A model with no known price is priced as the most expensive. The tally is in memory and resets on restart, so the log line per diagnosis, with its cost, is the record.
+  - **Per hour and at once:** 30 diagnoses an hour and 3 at a time. A request refused for concurrency or the daily cap doesn't use up the hourly allowance.
+  - **Repeats:** an identical question within five minutes is answered from memory and counts against no limit, since a colleague opening the same alert shouldn't cost twice. The page asks for a fresh diagnosis when you run again.
+  - A failed diagnosis still counts what it spent before failing.
+- **Audit:** one JSON log line per question, per tool call, and per diagnosis with its tokens and cost. Alloy ships those to Loki like any other service's logs.
+- **A five-second cache** on the dashboard's reads, so open dashboards cost the API server one read.
 - **Testing has two layers:**
   - Unit tests with a scripted model check the loop (all results of a turn come back in one message, failures reach the model as errors, the turn limit holds, refusals are reported), the tools against a fake API server, and redaction. `make test-assistant`.
   - The dashboard's numbers (totals, capacity, node requests, problems, versions, drill-down, charts) are tested against a fake API server. A regression test checks every list the page reads arrives as an array. It was written after the page crashed on a node without conditions, and fails if the fix is reverted.
@@ -34,7 +41,8 @@ When a service breaks, an engineer reads pod status, events, logs, the objects a
 - **Not deployed.** It has no login in front of it. Before it goes on EKS it needs authentication (oauth2-proxy with GitHub, as for Grafana), a NetworkPolicy, and the key in Secrets Manager.
 - **Logs leave the cluster.** Redaction is pattern-based and will miss some secrets. Teams with sensitive logs may not want this on their namespaces.
 - **A diagnosis is a hypothesis.** The answer lists what the assistant looked at so an engineer can check it.
-- **The model call costs money:** a few cents per fault on the test set, to be measured.
+- **The model call costs money:** a few cents per fault on the test set, to be measured. The caps are estimates from list prices, not billing, and the tally resets on restart. Set a spend limit in the Anthropic Console as well.
+- **A wrap-up answer is weaker than a full investigation.** The page says when an answer is partial.
 - **Metrics and logs history:** it can read the current and previous container logs, and ask Prometheus. Loki queries and Argo CD history aren't in yet.
 - **The upgrade advisor isn't built.** The dashboard shows version skew, but not EKS upgrade insights, deprecated API usage or add-on compatibility.
 - **No history of past diagnoses.** Each one is in the logs, but the page doesn't list them.

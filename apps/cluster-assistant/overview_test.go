@@ -291,9 +291,10 @@ func TestStreamedDiagnosis(t *testing.T) {
 func mustJSON(v any) []byte { b, _ := json.Marshal(v); return b }
 
 func TestDiagnosisRequestsAreChecked(t *testing.T) {
-	s := testServer(&scripted{})
+	// Two real diagnoses are possible: the limit is two an hour, and a failed one is free.
+	s := testServer(&scripted{replies: []string{reply("end_turn", `[{"type":"text","text":"ok"}]`), reply("end_turn", `[{"type":"text","text":"ok"}]`)}})
 	for body, want := range map[string]int{
-		`{"namespace":"shop"}`:             0, // allowed; fails later only because the script is empty
+		`{"namespace":"shop"}`:             http.StatusOK,
 		`{"namespace":"../x"}`:             http.StatusBadRequest,
 		`{"namespace":"shop","pod":"A B"}`: http.StatusBadRequest,
 		`{"namespace":"shop","question":"` + strings.Repeat("x", 1001) + `"}`: http.StatusBadRequest,
@@ -301,16 +302,15 @@ func TestDiagnosisRequestsAreChecked(t *testing.T) {
 	} {
 		rec := httptest.NewRecorder()
 		s.handleDiagnose(rec, httptest.NewRequest("POST", "/api/diagnose", strings.NewReader(body)))
-		if want != 0 && rec.Code != want {
+		if rec.Code != want {
 			t.Errorf("%s: status %d, want %d", body, rec.Code, want)
 		}
 	}
 	// The two-per-hour limit: one was used above, so the next fills it and the one after is refused.
-	rec := httptest.NewRecorder()
-	s.handleDiagnose(rec, httptest.NewRequest("POST", "/api/diagnose", strings.NewReader(`{"namespace":"shop"}`)))
-	rec = httptest.NewRecorder()
-	s.handleDiagnose(rec, httptest.NewRequest("POST", "/api/diagnose", strings.NewReader(`{"namespace":"shop"}`)))
-	if rec.Code != http.StatusTooManyRequests {
+	if rec := post(s, s.handleDiagnose, `{"namespace":"shop","question":"again"}`); rec.Code != http.StatusOK {
+		t.Fatalf("the second diagnosis should fill the limit: %d", rec.Code)
+	}
+	if rec := post(s, s.handleDiagnose, `{"namespace":"shop","question":"once more"}`); rec.Code != http.StatusTooManyRequests {
 		t.Errorf("limit not enforced: %d", rec.Code)
 	}
 }

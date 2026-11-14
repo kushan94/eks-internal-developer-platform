@@ -90,7 +90,7 @@ if [ "$MODE" != --evidence-only ]; then
   k -n cluster-assistant port-forward svc/cluster-assistant 18080:8080 > /dev/null 2>&1 &
   PF_PID=$!
   sleep 3
-  total_in=0 total_out=0
+  total_in=0 total_out=0 total_cost=0
   for f in "$FAULTS"/*.yaml; do
     name="$(basename "$f" .yaml)"
     expect="$(expect_of "$name")"
@@ -100,6 +100,8 @@ if [ "$MODE" != --evidence-only ]; then
     answer="$(jq -r '.answer // empty' <<< "$out" 2> /dev/null)"
     in="$(jq -r '.inputTokens // 0' <<< "$out" 2> /dev/null)" out_t="$(jq -r '.outputTokens // 0' <<< "$out" 2> /dev/null)"
     total_in=$((total_in + in)) total_out=$((total_out + out_t))
+    cost="$(jq -r '.costUSD // 0' <<< "$out" 2> /dev/null)"
+    total_cost="$(awk -v a="$total_cost" -v b="${cost:-0}" 'BEGIN { printf "%.4f", a + b }')"
     steps="$(jq -r '[.steps[].tool] | join(",")' <<< "$out" 2> /dev/null)"
     if grep -Eqi -- "$expect" <<< "$answer"; then
       pass "$name: named /$expect/ in $((SECONDS - start))s using $steps"
@@ -107,7 +109,7 @@ if [ "$MODE" != --evidence-only ]; then
       fail "$name: answer didn't match /$expect/: ${answer:-$out}"
     fi
   done
-  echo "  tokens: $total_in in, $total_out out"
+  echo "  tokens: $total_in in, $total_out out, about \$$total_cost (estimated at list prices)"
 fi
 
 echo

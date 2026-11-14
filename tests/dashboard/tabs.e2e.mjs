@@ -106,29 +106,54 @@ await p.close();
 
 // The assistant, with its streaming response stubbed so no model is called
 const sse = (...evs) => evs.map(([e, d]) => `event: ${e}\ndata: ${JSON.stringify(d)}\n\n`).join('');
-const STREAM = sse(
+const ANSWER = '## Cause\nThe container is **OOMKilled**.\n\n- `list_pods`: exit code 137\n\n```yaml\nmemory: 256Mi\n```\n\n<img src=x onerror=window.__pwned=1>';
+const done = extra => ['done', { answer: ANSWER, steps: [1, 2], inputTokens: 5210, outputTokens: 640, costUSD: 0.0123, costKnown: true, ...extra }];
+const LIVE = sse(
   ['turn', { turn: 1 }],
   ['tool', { tool: 'list_pods', input: { namespace: 'fault-oom' } }],
   ['step', { tool: 'list_pods', input: {}, bytes: 612 }],
   ['tool', { tool: 'get_pod_logs', input: { namespace: 'fault-oom', previous: true } }],
   ['step', { tool: 'get_pod_logs', input: {}, bytes: 0, failed: true }],
-  ['done', { answer: '## Cause\nThe container is **OOMKilled**.\n\n- `list_pods`: exit code 137\n\n```yaml\nmemory: 256Mi\n```\n\n<img src=x onerror=window.__pwned=1>', steps: [1, 2], inputTokens: 5210, outputTokens: 640 }],
+  done({}),
 );
+const CACHED = sse(done({ cached: true, cachedAt: new Date(Date.now() - 120000).toISOString(), costUSD: 0 }));
+const OUT_OF_BUDGET = sse(['turn', { turn: 1 }], done({ answer: 'Best guess.', stopped: 'budget' }));
 p = await open(BASE + '#/overview');
 await p.setRequestInterception(true);
-let sent = null;
+const bodies = [];
 p.on('request', r => {
-  if (r.url().endsWith('/api/diagnose/stream')) { sent = JSON.parse(r.postData()); r.respond({ status: 200, contentType: 'text/event-stream', body: STREAM }); } else r.continue();
+  if (!r.url().endsWith('/api/diagnose/stream')) return r.continue();
+  const b = JSON.parse(r.postData());
+  bodies.push(b);
+  const stream = b.question.includes('budget') ? OUT_OF_BUDGET : bodies.length === 1 ? CACHED : LIVE;
+  r.respond({ status: 200, contentType: 'text/event-stream', body: stream });
 });
 await p.evaluate(() => document.querySelector('#problems .btn').click()); await wait(300);
-check('the assistant waits for Run before calling anything', sent === null);
+check('the assistant waits for Run before calling anything', bodies.length === 0);
+check('it shows today\'s spend from the real usage endpoint', await p.evaluate(() => /^Today: \$[\d.]+ of \$[\d.]+ · \d+ diagnos(is|es) · \d+ of \d+ allowed this hour$/.test(document.getElementById('budget').textContent)), await p.evaluate(() => document.getElementById('budget').textContent));
+
+// 1. A cached answer is labelled, costs nothing, and offers a fresh one
+await p.click('#run'); await wait(700);
+check('the first run does not ask for a fresh diagnosis', bodies[0] && bodies[0].fresh === false, JSON.stringify(bodies[0]));
+check('a cached answer says so and that it was free', await p.evaluate(() => /Answer from 2m ago · no new cost/.test(document.getElementById('usage').textContent)), await p.evaluate(() => document.getElementById('usage').textContent));
+check('a cached answer carries a note', await p.evaluate(() => { const n = document.getElementById('note'); return !n.hidden && n.classList.contains('info') && /same question/.test(n.textContent); }));
+check('the button offers a fresh diagnosis', await p.evaluate(() => /fresh diagnosis/.test(document.getElementById('run').textContent)));
+
+// 2. Running again asks for a fresh one, and a live run shows each step and its cost
 await p.click('#run'); await wait(800);
-check('Run sends the target and the question', sent && sent.namespace && typeof sent.question === 'string', JSON.stringify(sent));
+check('running again asks for a fresh diagnosis', bodies[1] && bodies[1].fresh === true, JSON.stringify(bodies[1]));
 check('every tool call shows in the timeline, failed ones marked', await p.evaluate(() => document.querySelectorAll('#timeline li').length === 2 && document.querySelectorAll('#timeline li.failed').length === 1));
 check('the answer is rendered as headings, lists and code', await p.evaluate(() => !!document.querySelector('#answer h4') && !!document.querySelector('#answer li') && !!document.querySelector('#answer pre')));
 check('HTML in the answer is shown as text and never runs', await p.evaluate(() => !document.querySelector('#answer img') && !window.__pwned && document.getElementById('answer').textContent.includes('<img')));
-check('the usage line shows tool calls and tokens', await p.evaluate(() => /2 tool calls · 5,210 tokens in, 640 out/.test(document.getElementById('usage').textContent)), await p.evaluate(() => document.getElementById('usage').textContent));
+check('the usage line shows tool calls, tokens and cost', await p.evaluate(() => /2 tool calls · 5,210 tokens in, 640 out · about \$0\.012 · \ds/.test(document.getElementById('usage').textContent)), await p.evaluate(() => document.getElementById('usage').textContent));
+check('a live answer has no note', await p.evaluate(() => document.getElementById('note').hidden));
 await shot(p, 'assistant');
+
+// 3. An answer cut short by the budget is marked as partial
+await p.evaluate(() => { document.getElementById('question').value = 'budget'; });
+await p.click('#run'); await wait(700);
+check('a budget stop gives the answer and warns it is partial', await p.evaluate(() => { const n = document.getElementById('note'); return !n.hidden && /token budget/.test(n.textContent) && /partial/.test(n.textContent) && document.getElementById('answer').textContent === 'Best guess.'; }));
+check('the spend line refreshes after a run', await p.evaluate(() => document.getElementById('budget').textContent.startsWith('Today:')));
 await p.close();
 
 // Dark and phone

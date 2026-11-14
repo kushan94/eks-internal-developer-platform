@@ -166,6 +166,8 @@ td.wrap { max-width: 340px; overflow-wrap: anywhere; }
 .answer pre { margin: 0 0 10px; padding: 10px 12px; overflow-x: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; }
 .answer code { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
 .answer pre code { background: none; border: 0; padding: 0; }
+.note { margin: 14px 0 0; padding: 8px 12px; border-radius: 8px; background: var(--warn-bg); color: var(--warn); font-size: 13px; }
+.note.info { background: var(--info-bg); color: var(--accent); }
 .answer.error { background: var(--err-bg); color: var(--err); border-color: transparent; }
 
 /* Tabs */

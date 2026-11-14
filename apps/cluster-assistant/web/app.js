@@ -45,7 +45,7 @@ function h(tag, props, ...kids) {
 
 const $ = id => document.getElementById(id);
 const TABS = ['overview', 'workloads', 'nodes', 'delivery', 'events'];
-const state = { overview: null, charts: null, pods: null, events: null, tab: 'overview', drawerNS: null, auto: true, timer: null, abort: null, opener: null };
+const state = { ran: false, overview: null, charts: null, pods: null, events: null, tab: 'overview', drawerNS: null, auto: true, timer: null, abort: null, opener: null };
 
 // ---- Formatting --------------------------------------------------------
 
@@ -461,6 +461,9 @@ function openAssistant(t, opener) {
   $('timeline').replaceChildren();
   const ans = $('answer'); ans.replaceChildren(); ans.className = 'answer';
   $('usage').textContent = '';
+  $('note').hidden = true;
+  state.ran = false;
+  loadBudget();
   const run = $('run'); run.replaceChildren(icon('spark'), 'Run diagnosis'); run.disabled = false;
   openDrawer($('assistant'), opener);
   $('question').focus();
@@ -490,6 +493,37 @@ async function* sse(resp) {
   }
 }
 
+const money = v => '$' + v.toFixed(v < 0.1 ? 3 : 2);
+
+const STOP_NOTES = {
+  budget: 'The assistant reached its token budget and answered with what it had found so far. Treat this as partial.',
+  max_turns: 'The assistant reached its limit on steps and answered with what it had found so far. Treat this as partial.',
+  max_tokens: 'The answer was cut off by its length limit.',
+  refusal: 'The model declined to answer this request.',
+};
+
+function showOutcome(data, seconds) {
+  state.cached = !!data.cached;
+  const tools = `${data.steps.length} tool call${data.steps.length === 1 ? '' : 's'}`;
+  $('usage').textContent = data.cached
+    ? `Answer from ${ago(data.cachedAt)} · no new cost · ${tools}`
+    : `${tools} · ${fmtCount(data.inputTokens)} tokens in, ${fmtCount(data.outputTokens)} out · about ${money(data.costUSD)}${data.costKnown ? '' : ' (price of this model not known)'} · ${seconds}s`;
+  const note = $('note');
+  const text = data.cached ? 'This is a recent answer to the same question. Run a fresh diagnosis if things have changed.' : STOP_NOTES[data.stopped];
+  note.hidden = !text;
+  note.textContent = text || '';
+  note.className = 'note' + (data.cached ? ' info' : '');
+}
+
+async function loadBudget() {
+  const el = $('budget');
+  try {
+    const u = await api('/api/usage');
+    const cap = u.capUSD > 0 ? ` of ${money(u.capUSD)}` : '';
+    el.textContent = `Today: ${money(u.spentUSD)}${cap} · ${u.diagnoses} diagnos${u.diagnoses === 1 ? 'is' : 'es'} · ${u.hourlyUsed} of ${u.hourlyLimit} allowed this hour`;
+  } catch { el.textContent = ''; }
+}
+
 function stopRun() { if (state.abort) { state.abort.abort(); state.abort = null; } }
 
 function setRunning(on) {
@@ -498,7 +532,8 @@ function setRunning(on) {
 
 async function runDiagnosis() {
   const timeline = $('timeline'), ans = $('answer');
-  timeline.replaceChildren(); ans.replaceChildren(); ans.className = 'answer'; $('usage').textContent = '';
+  timeline.replaceChildren(); ans.replaceChildren(); ans.className = 'answer'; $('usage').textContent = ''; $('note').hidden = true;
+  state.cached = false;
   setRunning(true);
   state.abort = new AbortController();
   let current = null;
@@ -507,7 +542,7 @@ async function runDiagnosis() {
   try {
     const resp = await fetch('/api/diagnose/stream', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: state.abort.signal,
-      body: JSON.stringify({ namespace: target.namespace, pod: target.pod || '', service: target.service || '', question: $('question').value.trim() }),
+      body: JSON.stringify({ namespace: target.namespace, pod: target.pod || '', service: target.service || '', question: $('question').value.trim(), fresh: state.ran }),
     });
     if (!resp.ok) throw new Error((await resp.text()).trim());
     for await (const [ev, data] of sse(resp)) {
@@ -518,7 +553,7 @@ async function runDiagnosis() {
         if (current) current.remove();
         if (data.answer) { ans.className = 'answer filled'; ans.replaceChildren(...markdown(data.answer)); }
         else { ans.className = 'answer filled error'; ans.textContent = 'No answer (' + (data.stopped || 'unknown') + ').'; }
-        $('usage').textContent = `${data.steps.length} tool calls · ${fmtCount(data.inputTokens)} tokens in, ${fmtCount(data.outputTokens)} out · ${Math.round((Date.now() - started) / 1000)}s`;
+        showOutcome(data, Math.round((Date.now() - started) / 1000));
       } else if (ev === 'failed') { if (current) current.remove(); ans.className = 'answer filled error'; ans.textContent = data.error; }
     }
   } catch (e) {
@@ -527,7 +562,9 @@ async function runDiagnosis() {
     else $('usage').textContent = 'Stopped.';
   } finally {
     state.abort = null; setRunning(false);
-    $('run').replaceChildren(icon('spark'), 'Run again');
+    state.ran = true;
+    $('run').replaceChildren(icon('spark'), state.cached ? 'Run a fresh diagnosis' : 'Run again');
+    loadBudget();
   }
 }
 
