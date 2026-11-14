@@ -65,6 +65,16 @@ type Agent struct {
 	Log       *slog.Logger
 }
 
+// Emit is told as an investigation goes: "turn" before each model call, and
+// "tool" before and "step" after each tool call.
+type Emit func(kind string, data any)
+
+func (e Emit) send(kind string, data any) {
+	if e != nil {
+		e(kind, data)
+	}
+}
+
 func (a *Agent) toolParams() []anthropic.ToolUnionParam {
 	out := make([]anthropic.ToolUnionParam, 0, len(a.Tools))
 	for _, t := range a.Tools {
@@ -80,6 +90,11 @@ func (a *Agent) toolParams() []anthropic.ToolUnionParam {
 // Run asks the model to investigate, runs the tools it asks for, and returns
 // its answer. It stops after MaxTurns model calls.
 func (a *Agent) Run(ctx context.Context, prompt string) (Result, error) {
+	return a.RunWith(ctx, prompt, nil)
+}
+
+// RunWith is Run, reporting progress to emit.
+func (a *Agent) RunWith(ctx context.Context, prompt string, emit Emit) (Result, error) {
 	var res Result
 	messages := []anthropic.MessageParam{anthropic.NewUserMessage(anthropic.NewTextBlock(prompt))}
 	tools := a.toolParams()
@@ -89,6 +104,7 @@ func (a *Agent) Run(ctx context.Context, prompt string) (Result, error) {
 	}
 
 	for turn := 0; turn < a.MaxTurns; turn++ {
+		emit.send("turn", map[string]int{"turn": turn + 1})
 		resp, err := a.Client.New(ctx, anthropic.MessageNewParams{
 			Model:     a.Model,
 			MaxTokens: a.MaxTokens,
@@ -116,7 +132,7 @@ func (a *Agent) Run(ctx context.Context, prompt string) (Result, error) {
 			case anthropic.TextBlock:
 				text = append(text, v.Text)
 			case anthropic.ToolUseBlock:
-				out, step := a.runTool(ctx, byName, v.Name, json.RawMessage(v.JSON.Input.Raw()))
+				out, step := a.runTool(ctx, emit, byName, v.Name, json.RawMessage(v.JSON.Input.Raw()))
 				res.Steps = append(res.Steps, step)
 				results = append(results, anthropic.NewToolResultBlock(v.ID, out, step.Failed))
 			}
@@ -135,8 +151,9 @@ func (a *Agent) Run(ctx context.Context, prompt string) (Result, error) {
 	return res, nil
 }
 
-func (a *Agent) runTool(ctx context.Context, byName map[string]Tool, name string, input json.RawMessage) (string, Step) {
+func (a *Agent) runTool(ctx context.Context, emit Emit, byName map[string]Tool, name string, input json.RawMessage) (string, Step) {
 	step := Step{Tool: name, Input: input}
+	emit.send("tool", step)
 	t, ok := byName[name]
 	if !ok {
 		step.Failed = true
@@ -152,5 +169,6 @@ func (a *Agent) runTool(ctx context.Context, byName map[string]Tool, name string
 	out = truncate(redact(out))
 	step.Bytes = len(out)
 	a.Log.Info("tool", "tool", name, "input", string(input), "bytes", step.Bytes, "failed", step.Failed)
+	emit.send("step", step)
 	return out, step
 }

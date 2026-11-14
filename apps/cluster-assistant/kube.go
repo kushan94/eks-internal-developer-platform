@@ -184,31 +184,42 @@ func stripNoise(body []byte) (string, error) {
 }
 
 type podList struct {
-	Items []struct {
-		Metadata struct {
-			Name              string            `json:"name"`
-			Labels            map[string]string `json:"labels"`
-			CreationTimestamp time.Time         `json:"creationTimestamp"`
-		} `json:"metadata"`
-		Spec struct {
-			NodeName string `json:"nodeName"`
-		} `json:"spec"`
-		Status struct {
-			Phase      string `json:"phase"`
-			Reason     string `json:"reason"`
-			Message    string `json:"message"`
-			Conditions []struct {
-				Type, Status, Reason, Message string
-			} `json:"conditions"`
-			ContainerStatuses []struct {
-				Name         string `json:"name"`
-				Ready        bool   `json:"ready"`
-				RestartCount int    `json:"restartCount"`
-				State        state  `json:"state"`
-				LastState    state  `json:"lastState"`
-			} `json:"containerStatuses"`
-		} `json:"status"`
-	} `json:"items"`
+	Items []pod `json:"items"`
+}
+
+type pod struct {
+	Metadata struct {
+		Name              string     `json:"name"`
+		Namespace         string     `json:"namespace"`
+		CreationTimestamp time.Time  `json:"creationTimestamp"`
+		DeletionTimestamp *time.Time `json:"deletionTimestamp"`
+	} `json:"metadata"`
+	Spec struct {
+		NodeName   string `json:"nodeName"`
+		Containers []struct {
+			Resources struct {
+				Requests map[string]string `json:"requests"`
+			} `json:"resources"`
+		} `json:"containers"`
+	} `json:"spec"`
+	Status struct {
+		Phase      string `json:"phase"`
+		Reason     string `json:"reason"`
+		Message    string `json:"message"`
+		Conditions []struct {
+			Type, Status, Reason, Message string
+		} `json:"conditions"`
+		InitContainerStatuses []containerStatus `json:"initContainerStatuses"`
+		ContainerStatuses     []containerStatus `json:"containerStatuses"`
+	} `json:"status"`
+}
+
+type containerStatus struct {
+	Name         string `json:"name"`
+	Ready        bool   `json:"ready"`
+	RestartCount int    `json:"restartCount"`
+	State        state  `json:"state"`
+	LastState    state  `json:"lastState"`
 }
 
 type state struct {
