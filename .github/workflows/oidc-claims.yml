@@ -1,0 +1,48 @@
+name: OIDC claims
+
+# Prints the claims GitHub puts in the token a job would present to AWS, so the
+# trust policies in infra/bootstrap/github-oidc.tf can be checked against what
+# GitHub really sends. It doesn't call AWS and creates nothing, so it works
+# while the account can't create the OIDC provider. Check a run with
+# scripts/check-oidc.sh --claims <run id>.
+#
+# It runs for the environments that any branch may use. aws-apply and
+# aws-destroy only deploy from main, and their tokens have the same shape.
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/oidc-claims.yml
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  claims:
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: [aws-plan, aws-build]
+    runs-on: ubuntu-latest
+    environment: ${{ matrix.environment }}
+    permissions:
+      id-token: write
+    steps:
+      - name: Show the token's claims
+        run: |
+          response="$(curl -sS --fail -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com")"
+          token="$(jq -r .value <<< "$response")"
+          echo "::add-mask::$token"
+          python3 - "$token" <<'PY'
+          import base64, json, os, sys
+          payload = sys.argv[1].split(".")[1]
+          claims = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
+          # The claims are not secret, but the token is, so only the claims are shown.
+          keys = ["iss", "aud", "sub", "repository", "repository_owner", "environment", "ref", "event_name", "job_workflow_ref", "runner_environment"]
+          shown = {k: claims.get(k) for k in keys}
+          print("CLAIMS " + json.dumps(shown, sort_keys=True))
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write("### Token claims for `" + str(claims.get("environment")) + "`\n\n| Claim | Value |\n|---|---|\n")
+              for k in keys:
+                  f.write("| `%s` | `%s` |\n" % (k, shown[k]))
+          PY

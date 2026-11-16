@@ -204,6 +204,12 @@ test: ## Render the WebService composition for each runtime, database class, pro
 test-template: ## Render the Backstage template with and without environments, build every environment and validate the WebServices (run make test first)
 	NODE_IMAGE=$(NODE_IMAGE) YQ_IMAGE=$(YQ_IMAGE) CROSSPLANE=$(CROSSPLANE) tests/template/test.sh
 
+test-oidc: ## Check what GitHub's OIDC sign-in depends on: who each role trusts, the workflows' environments, and the GitHub environments. No AWS needed. Add --claims <run id> to check a real token
+	scripts/check-oidc.sh
+
+test-ci-roles: ## Check what the CI identities may and may not do with the IAM policy simulator (needs aws login and the bootstrap state; creates nothing)
+	scripts/check-ci-role-permissions.sh
+
 test-assistant: ## Check the runbooks against the platform, then vet and unit test the cluster assistant (no cluster, no API key)
 	scripts/check-runbooks.sh
 	docker run --rm -v $(CURDIR)/apps/cluster-assistant:/src -w /src $(GO_IMAGE) sh -c 'test -z "$$(gofmt -l .)" && go vet ./... && go test -count=1 ./...'

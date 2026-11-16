@@ -9,12 +9,32 @@ variable "github_repo" {
   default     = "kushan94/eks-internal-developer-platform"
 }
 
+# GitHub puts these numeric IDs in the token's subject for this repository
+# ("immutable subjects"), so a repository that is renamed, or deleted and
+# created again under the same name, can't inherit the trust. `gh api
+# repos/OWNER/NAME --jq '.id, .owner.id'` shows them, and scripts/check-oidc.sh
+# checks them against GitHub.
+variable "github_owner_id" {
+  description = "Numeric ID of the GitHub account that owns the repository."
+  type        = number
+  default     = 36834246
+}
+
+variable "github_repo_id" {
+  description = "Numeric ID of the GitHub repository."
+  type        = number
+  default     = 1444385242
+}
+
 resource "aws_iam_openid_connect_provider" "github" {
   url            = "https://token.actions.githubusercontent.com"
   client_id_list = ["sts.amazonaws.com"]
 }
 
 locals {
+  # What the token's subject starts with, for example repo:owner@123/name@456.
+  github_subject_prefix = "repo:${split("/", var.github_repo)[0]}@${var.github_owner_id}/${split("/", var.github_repo)[1]}@${var.github_repo_id}"
+
   github_roles = {
     plan       = ["aws-plan"]
     apply      = ["aws-apply", "aws-destroy"]
@@ -39,7 +59,7 @@ data "aws_iam_policy_document" "github_trust" {
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = [for env in each.value : "repo:${var.github_repo}:environment:${env}"]
+      values   = [for env in each.value : "${local.github_subject_prefix}:environment:${env}"]
     }
   }
 }
