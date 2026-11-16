@@ -1,23 +1,16 @@
-# I Built an Internal Developer Platform on EKS for About $0.40 an Hour. Here's What It Took.
+# I Destroy My Kubernetes Platform Every Night. Here's What That Taught Me.
 
-*Crossplane, Argo CD and Backstage on a cluster that's destroyed every night, then hardened toward production*
+*An internal developer platform on EKS for about $0.40 an hour, and the bugs only a real cluster showed me*
 
-I wanted to understand internal developer platforms by building one, not by reading vendor diagrams. So I started from an empty AWS account and built one on Amazon EKS.
+Every night at 22:00 UTC, a scheduled workflow destroys my Kubernetes platform: the EKS cluster, the databases, the load balancer, the DNS records. The next session starts from nothing, and everything comes back from Git, Terraform and a few secrets in Secrets Manager.
 
-It has:
-- a self-service API and a developer portal
-- databases on request
-- guardrails, network isolation between teams
-- dev, staging and prod with promotion
-- autoscaling, and dashboards with logs, alerts and cost per service
+I did it because the platform runs on AWS credits, and the EKS control plane alone costs $0.10 an hour. It turned out to be the best design constraint I've had. A platform you can destroy and recreate every day can't hide anything: no state that lives only in the cluster, no credential someone pasted once, no test that was never run for real.
 
-It runs only while I'm working on it, and Terraform destroys it every night.
+The platform lets a developer write one small file and get a service with a database, a public URL, dashboards, alerts and network isolation. I built it from an empty AWS account with Crossplane, Argo CD and a self-hosted Backstage, to learn how an internal developer platform fits together. This is the write-up, for platform, DevOps and cloud engineers, including what broke. The code, with a decision record for every choice, is at [github.com/kushan94/eks-internal-developer-platform](https://github.com/kushan94/eks-internal-developer-platform).
 
-This is the write-up, for platform, DevOps and cloud engineers who want to see how the pieces fit, what each choice cost, and what broke along the way. The code is public, with a decision record for every choice: [github.com/kushan94/eks-internal-developer-platform](https://github.com/kushan94/eks-internal-developer-platform).
+> A lot of the hardening work has run on a local kind cluster and not yet on EKS. I'll say which is which as I go.
 
-> It started as a learning environment and grew toward production. I'll say plainly what has been tested on EKS and what has only run on a local cluster so far.
-
-## 1. What a developer gets
+## What a developer gets
 
 The whole platform exists to make this file enough:
 
@@ -31,209 +24,105 @@ spec:
   port: 8080
   replicas: 2
   public: true
-  metrics:
-    path: /metrics
   database:
     class: managed
 ```
 
-When it's merged, the developer gets:
+Merge it, and the developer gets:
 
-- **A Deployment and Service,** with a security context, resource limits, spread across zones and a PodDisruptionBudget, none of which they had to write.
+- **A Deployment and Service** with a security context, resource limits, zone spread and a disruption budget, none of which they wrote.
 - **A public HTTPS URL,** with DNS and a certificate.
-- **Their own PostgreSQL database and login** on a shared RDS server, passed in as `DATABASE_URL` and the usual `PG*` variables.
-- **A Grafana dashboard** with their metrics, logs and cost per hour, and **alerts in Slack** when the service goes down.
-- **Network isolation.** Only their own namespace, Prometheus and the load balancer can reach the service. It can only reach DNS, its namespace and its database, unless it lists more.
+- **Their own PostgreSQL database and login,** passed in as `DATABASE_URL`.
+- **A Grafana dashboard** with metrics, logs and cost per hour, and a Slack alert when the service goes down.
+- **Network isolation.** Only its own namespace, Prometheus and the load balancer can reach it. It can only reach DNS, its namespace and its database, unless it lists more.
 
-Add `runtime: ecs` and the service runs on ECS Fargate instead. Change `class: managed` to `class: in-cluster`, and the database becomes a CloudNativePG cluster next to the service. Add an `autoscaling` block, and it scales on CPU.
+Add `runtime: ecs` and the same file runs on Fargate instead, minus the features that are Kubernetes-only for now.
 
-Developers don't write the file themselves. A Backstage form writes it, in dev, staging and prod by default, and opens a pull request.
+Developers don't write the file by hand. A Backstage form writes it and opens a pull request, so nothing in the portal calls a cloud API and Git is the only way in. Services get dev, staging and prod as namespaces. Promotion is a pull request that copies the image staging already ran into prod, so prod only runs what staging ran.
 
-## 2. The architecture
+## The shape
 
-```
- Developer
-    │  fills in a form
-    ▼
- Backstage ───────────── opens a pull request ──────────────▶ GitHub repo
-                                                                   │ merge
-                                                                   ▼
- ┌──────────────────────────── EKS cluster ────────────────────────────────┐
- │                                                                         │
- │  Argo CD ── one app per workloads/ folder ──▶ WebService (namespaced XR)│
- │                                                    │                    │
- │                         Crossplane composition (Go templates)           │
- │            ┌───────────────┬───────────────┬──────┴──────┬───────────┐ │
- │            ▼               ▼               ▼             ▼           ▼ │
- │       Deployment      HTTPRoute       PodMonitor     Postgres     ECS  │
- │       + Service      (Gateway API)    (Prometheus)   login + DB  task  │
- │                            │                             │         │   │
- │   Kyverno + Pod Security   │   Prometheus, Grafana,      │         │   │
- │   NetworkPolicies          │   Alertmanager, Loki,       │         │   │
- │                            │   OpenCost                  │         │   │
- └────────────────────────────┼─────────────────────────────┼─────────┼───┘
-                              ▼                             ▼         ▼
-                  ALB + ACM + Route 53            RDS PostgreSQL   ECS Fargate
-                  (via ExternalDNS)               (shared server)
-```
+1. **Backstage** opens a pull request as a GitHub App.
+2. **Argo CD** watches the repo and creates a namespace and an application for each team folder, or each environment of a service.
+3. **Crossplane** owns the `WebService` API. One composition, written with Go templates, turns each one into the resources for its runtime and options.
+4. **Controllers do the rest:** the AWS Load Balancer Controller and ExternalDNS for the URL, CloudNativePG or provider-sql for the database.
 
-The flow, end to end:
+Guardrails apply to every team namespace: Pod Security's `restricted` profile, Kyverno policies (no `:latest`, approved registries, resource requests) and keyless image signing. CI signs images with cosign using its GitHub identity, and Kyverno only admits `ghcr.io/kushan94` images signed by this repo's workflows on `main`, so there are no signing keys to store.
 
-1. **Backstage** renders a template into a `WebService` file and opens a pull request as a GitHub App. Nothing calls a cloud API from the portal; Git is the only way in.
-2. **Argo CD** watches the repo. ApplicationSets create one Argo CD application and namespace for each team folder, or for each environment of a service.
-3. **Crossplane** owns the `WebService` API. One composition, written with Go templates, turns each `WebService` into the resources for its runtime and options.
-4. **Controllers do the rest.**
-   - The AWS Load Balancer Controller turns HTTPRoutes into an ALB, and ExternalDNS writes the Route 53 records.
-   - Crossplane's providers manage database logins and ECS services.
+I chose Crossplane because I wanted the developer API to be a Kubernetes resource, so Argo CD, Backstage and `kubectl` all treat it the same. The cost is that I upgrade it and its providers myself. I self-hosted Backstage because a SaaS portal would have hidden the parts I wanted to learn.
 
-### Why these tools
+## What destroying it every night forces
 
-**Crossplane over Terraform modules or ACK + kro.** I wanted the developer API to be a Kubernetes resource, so Argo CD, Backstage and `kubectl` all treat it the same. Crossplane v2's namespaced composite resources fit: a `WebService` lives in the team's namespace next to its pods. I picked it over ACK with kro because it isn't tied to AWS, and because running it myself teaches more. The cost is that I upgrade Crossplane and its providers myself, and the providers use real memory.
+**Anything that must survive lives outside the cluster.** A small bootstrap Terraform stack creates the state bucket, the container registry, the DNS zones and certificate, and the GitHub App keys in Secrets Manager, once.
 
-**Self-hosted Backstage over a SaaS portal.** A SaaS portal is less work, but it hides most of what I wanted to learn. Backstage runs in the cluster with GitHub sign-in and RDS. Its templates only open pull requests, so the portal never needs cloud credentials.
+**Credentials can't live only in the cluster.** External Secrets reads Secrets Manager through EKS Pod Identity, which works on a cluster that is ten minutes old. Sealed Secrets would need a decryption key for every new cluster.
 
-**Argo CD with one root application.** I apply one Argo CD application by hand. It renders a Helm chart that defines every other application. Dependency order is handled with retries and `SkipDryRunOnMissingResource`, not sync waves. Crossplane creates its CRDs after it starts, so resources using them fail a dry run at first, then succeed on a retry. It's less elegant than waves, but there's no ordering to maintain.
+**Nobody copies a token between steps.** The EKS API only allows my IP, so cluster setup runs on a CI runner inside the VPC. At boot, the runner signs a JWT with a GitHub App key using nothing but `openssl`, and exchanges it for a registration token. It installs Argo CD and External Secrets, and Argo CD takes over, including managing itself from then on.
 
-**The rest is common CNCF tooling:**
-- External Secrets for credentials
-- Gateway API for routing
-- CloudNativePG and provider-sql for databases
-- Kyverno for policy
-- kube-prometheus-stack for metrics
-- Loki and Alloy for logs
-- OpenCost for cost
+**Destroy needs as much care as create.** Controllers still running during `terraform destroy` recreated what I was deleting: the load balancer controller rebuilt an ALB, and ExternalDNS rewrote records. The destroy now removes their IAM permissions first.
 
-### One API, two runtimes
+**Backups have to outlive the cluster.** In the production shape, RDS keeps seven days of automated backups after the instance is deleted, which is what makes them useful, and in-cluster databases get EBS snapshots. Each has a restore drill script that writes a marker row, restores to a new instance, checks the row and times it. Those drills haven't run on EKS yet.
 
-Kubernetes suits teams that want its ecosystem, and ECS Fargate is simpler to run for ordinary web services. `spec.runtime` lets a developer choose without learning two toolsets: the same composition builds either a Deployment and Service, or an ECS task definition and service. The `WebService` stays in Kubernetes either way, so Git, Argo CD and Backstage work the same.
+**And a scheduled workflow is a safety net, not a timer.** GitHub has run my 22:00 destroy as late as 03:56. Once I started a session at 21:55, and the destroy queued behind my apply and would have torn the cluster down mid-test.
 
-The catch is that every feature has to exist twice, or say clearly that it doesn't. Public URLs, metrics, autoscaling and network policies are Kubernetes-only for now. An ECS `WebService` that asks for them fails with a message saying so, rather than half-working.
+## The upgrade that didn't upgrade
 
-Two details only a real apply caught:
-- **The service ID needs the cluster's name, not its ARN.** The ECS provider builds the service's ID from its `cluster` field. I'd passed the ARN, which is just as valid a string to a schema, so offline validation passed.
-- **An apostrophe broke a security group.** It was in the group's description, passed every check, and EC2 rejected it.
+The account started on AWS's Free plan. Its organization policy denies Spot instances, IAM OIDC providers and `ec2:CreateFleet`, and only allows Free Tier instance types. My first EKS apply created the cluster, the VPC and a NAT gateway, then failed on the node group with `The specified instance type is not eligible for Free Tier`, and the half-built cluster cost money until I fixed it. `terraform plan` can't see a service control policy. You find out at apply, after the expensive parts exist.
 
-## 3. Running it for $0.40 an hour
+The limits shaped the design in good ways. No OIDC provider meant Pod Identity instead of IRSA, which turned out simpler. When I wanted production features, I upgraded to the Paid plan.
 
-Three constraints drove more of the design than any tool choice.
-
-### The cluster is ephemeral
-
-This is a personal project on AWS credits. The EKS control plane alone costs $0.10 an hour, so a cluster left running would burn through them. So:
-
-- **Terraform creates the cluster at the start of a session and destroys it at the end.** A full session costs about $0.40 an hour: two nodes, NAT, RDS, the load balancer and a CI runner.
-- **A scheduled workflow destroys everything at 22:00 UTC,** in case I forget.
-- **Anything that must survive lives outside the cluster:** the Terraform state, the ECR repository, the DNS zones and certificate, and the GitHub App keys in Secrets Manager. A small *bootstrap* Terraform stack creates them once.
-
-That last point shapes everything. Credentials can't live only in the cluster. Sealed Secrets gets awkward too, because each new cluster would need the decryption key. External Secrets, reading Secrets Manager through EKS Pod Identity, works on a cluster that's ten minutes old.
-
-**Lesson: scheduled workflows are a safety net, not a timer.** GitHub has run my 22:00 destroy as late as 03:56. Once I started a session at 21:55, and the destroy queued behind the apply. It would have torn the cluster down mid-test.
-
-### The AWS Free plan says no to more than you'd expect
-
-The account started on AWS's Free plan, whose service control policies deny:
-- **Spot instances.**
-- **IAM OIDC providers.** So no IRSA, and Pod Identity instead, which turned out simpler. It also meant no GitHub OIDC, so CI uses IAM users with access keys: a read-only plan user, an apply user behind an approval rule, and a push-only image user.
-- **`ec2:CreateFleet`,** which rules out Karpenter and EKS Auto Mode.
-
-It also only allows Free Tier instance types, which isn't in the published policies. My first EKS apply created the cluster, VPC and NAT gateway, then failed on the node group with `The specified instance type is not eligible for Free Tier`, and the half-built cluster cost money until I fixed it. `aws ec2 describe-instance-types --filters Name=free-tier-eligible,Values=true` lists what's allowed. In eu-north-1, the only type with 8 GiB is `m7i-flex.large`.
-
-When I started hardening the platform, I upgraded the account to the Paid plan to lift those limits. **They didn't lift.** The account reported `PAID` and `ACTIVE`, but it stayed in the organization AWS uses for Free plan accounts, whose policy still denied OIDC and `CreateFleet` hours later. IAM's policy simulator shows this without creating anything:
+The limits didn't lift. The account reported `PAID` and `ACTIVE`, but it stayed in the organization AWS uses for Free plan accounts, and its policy still denied OIDC and `CreateFleet` hours later. IAM's policy simulator shows this without creating anything:
 
 ```sh
 aws iam simulate-principal-policy --policy-source-arn <your role ARN> \
   --action-names iam:CreateOpenIDConnectProvider ec2:CreateFleet \
+  --context-entries ContextKeyName=aws:RequestedRegion,ContextKeyValues=eu-north-1,ContextKeyType=string \
   --query 'EvaluationResults[].[EvalActionName,EvalDecision]' --output text
 ```
 
-**Lesson: read the account's limits before writing Terraform.** `terraform plan` can't see a service control policy. You only find it at apply, after the expensive parts exist.
+That `--context-entries` line matters. The organization's policy depends on the region, and without it the simulator reports that even an administrator can't create a cluster. With it, I also learned the organization refuses the other regions I tried: `us-east-1`, `us-west-2` and `eu-west-1`.
 
-### Small nodes run out of pods before memory
+**Lesson: read the account's limits before writing Terraform, and check that the thing you changed actually changed.**
 
-Two `m7i-flex.large` nodes have 4 vCPUs and 16 GiB between them. What ran out first wasn't CPU or memory, though. The VPC CNI gives each pod a real VPC IP from the node's network interfaces, and this type gets 29. Once the monitoring stack was in, both nodes were full at 29 or 30 pods. CPU requests were at most two-thirds used, and new pods sat in `Pending` with `Too many pods`.
+## Pods ran out before memory did
 
-**Prefix delegation** in the `vpc-cni` add-on hands out /28 prefixes instead of single IPs, which raised the limit to 110. Managed node groups only read it when they're created, so the add-on has to be configured first; the EKS module's `before_compute = true` handles that.
+Two small nodes have 4 vCPUs and 16 GiB between them. What ran out first was neither. The VPC CNI gives each pod a real VPC IP, and this instance type gets 29. With the monitoring stack in, both nodes were full while CPU requests were two-thirds used, and new pods sat in `Pending` with `Too many pods`.
 
-### From an empty account to a running platform
+Prefix delegation in the `vpc-cni` add-on hands out /28 prefixes instead of single IPs and raised the limit to 110. Managed node groups only read it when they're created, so the add-on has to be configured first.
 
-Getting to "Argo CD is syncing" takes five steps. Each hands credentials to the next without a person copying a token:
+## Testing the sign-in before AWS allowed it
 
-```
-laptop        make bootstrap       state bucket, IAM, ECR, DNS zones, certificate,
-                                   Secrets Manager secrets (values set with the CLI)
-GitHub        Infrastructure       Terraform: VPC, EKS, RDS, IAM roles, a CI runner
-Actions         workflow           inside the VPC
-in the VPC    runner boots         reads a GitHub App key from Secrets Manager,
-                                   registers itself with the repo
-in the VPC    Cluster workflow     installs Argo CD and External Secrets with Helm,
-                                   applies the root app, waits for every app to be healthy
-in-cluster    Argo CD              everything else from Git, including, from then on,
-                                   Argo CD and External Secrets themselves
-```
+Without an OIDC provider, GitHub Actions can't sign in to AWS with short-lived credentials. CI uses IAM user keys instead. I built the OIDC version, role trust policies included, but couldn't try it.
 
-Details worth copying:
-- **The EKS API isn't open to GitHub.** Its public endpoint only allows my IP. Cluster setup runs on a self-hosted runner in a private subnet. At boot, the runner signs a JWT with a GitHub App key using nothing but `openssl`, and exchanges it for a registration token.
-- **Argo CD manages itself after bootstrap.** An `argocd` Application adopts the Helm release the bootstrap installed, reading the same values file, so upgrading Argo CD is a one-line pull request. It never prunes and has no deletion finalizer, so a bad render can't make Argo CD delete itself.
-- **The Cluster workflow only passes when every Argo CD app is Synced and Healthy.** That check has caught real bugs. Several were fields that the API server or a controller fills in, which Argo CD then reported as drift forever. Server-side diff fixed most of them.
-- **Destroy needs as much care as create.** Controllers still running during `terraform destroy` recreated what I was deleting: the load balancer controller rebuilt an ALB, and ExternalDNS rewrote records. The destroy now removes their IAM permissions first.
-
-## 4. The golden path: Backstage, environments and promotion
-
-Backstage is the front door. A Web Service template asks for a name, team, runtime, image, port, database, whether it's public and whether to autoscale. It then opens a pull request through a GitHub App, so no personal token is involved. The catalog models the platform itself: domains, systems, the clusters and the shared database as resources. Each service's page shows:
-- its pods, from the Kubernetes plugin
-- its Argo CD sync status, through a read-only Argo CD account
-- links to its URL and dashboard
-
-**Environments are namespaces.** A service with environments is a Kustomize layout, a shared `base` plus a small override per environment:
+Rather than wait for AWS Support, I tested everything that doesn't need AWS. A tiny workflow prints the claims in the token GitHub would present, without calling any AWS API. My trust policies compared the token's subject with this:
 
 ```
-workloads/demo/visits/
-  base/          the WebService, without an image
-  envs/dev/      image + overrides  ->  namespace demo-dev
-  envs/staging/  image + overrides  ->  namespace demo-staging
-  envs/prod/     image + overrides  ->  namespace demo-prod
+repo:OWNER/NAME:environment:aws-plan
 ```
 
-An ApplicationSet turns each `envs/*` folder into an Argo CD app, and labels the namespace with its environment. A Kyverno policy keys on that label: in prod, a service needs at least two replicas. If it autoscales, the policy checks the autoscaling minimum, so `replicas: 3` with `minReplicas: 1` is still refused.
+The real token's subject was:
 
-I chose namespaces over a cluster per environment because separate clusters would multiply the cost of every session. The Git layout maps onto separate clusters later by changing each environment's destination.
+```
+repo:OWNER@123/NAME@456:environment:aws-plan
+```
 
-**Promotion is a pull request.** CI writes each new image to dev only. A Promote workflow copies the exact image dev runs into staging, or staging's into prod, and opens a pull request showing the old and new image. Merging it deploys. So prod only ever runs what staging ran.
+The repository uses immutable subjects, so GitHub puts the numeric owner and repository IDs in. Every sign-in would have been refused with `AccessDenied`, and I'd have found out only after AWS lifted the block, debugging it blind. The fix is stronger than what I had: a repository that is renamed, or deleted and recreated under the same name, gets a new ID and can't inherit the trust.
 
-One environment-specific trap: each environment must get its own database. The managed database is named after the namespace and service, `demo-prod-visits`, never after the shared Backstage ID, so dev can never touch prod's data.
+**Lesson: test the exact token, not your memory of the documentation.** The check also has to be able to fail. I broke the trust policy nine ways (a mistyped ID, a loosened condition, a typo in the Terraform expression) and made sure each one was caught. One slipped past my first version of the check until I tightened it.
 
-## 5. Databases, guardrails and isolation
+## OpenCost silently broke my alerts
 
-### Databases
+Cost per service was the last of the hardening features. The recording rule passed its unit test the first time. On a real cluster it returned nothing.
 
-`spec.database.class` offers two classes:
-- **`managed`:** a database and login on one shared RDS server. Crossplane's provider-sql creates the role, the database and a grant that revokes `CONNECT` from everyone else.
-- **`in-cluster`:** a CloudNativePG cluster next to the service.
+OpenCost publishes its own copy of `kube_pod_labels`. With two copies, Prometheus refuses every join on pod labels as many-to-many. That included my existing `WebServiceDown` alert, which would have stopped working the moment OpenCost was installed, with nothing to say so.
 
-Either way, the app gets the standard `PG*` variables, so it works with either class unchanged.
+Turning the duplicate off then left OpenCost with no prices at all. I blamed the setting I had just changed. The real cause was in its log all along: it stores price data in `/var/configs`, and its container's filesystem is read-only. With both fixed, a pod with 0.25 CPU and 256 MiB cost $0.008962 an hour, exactly my hand calculation.
 
-Two things surprised me:
-- **RDS's admin isn't a superuser.** Since Postgres 16 it can't create a database owned by another role unless it's a member of that role. The composition grants that membership, and Crossplane retries until it exists.
-- **ECS can't read Kubernetes Secrets.** For ECS services, the composition copies the password to Secrets Manager, and holds back the task definition until the secret exists.
+**Lesson: a unit test feeds your rule clean data. Only a real cluster feeds it the data you'll actually get.**
 
-**Backups that outlive the nightly destroy.** In the production profile, RDS keeps 7 days of automated backups with point-in-time restore. It also keeps them after the instance is deleted, which is what makes them useful when the cluster disappears every night. In-cluster databases get EBS snapshots on a schedule. Both come with a restore drill that writes a marker row, restores to a new instance or cluster, checks the row is there, and times the whole thing. A backup you haven't restored isn't a backup.
+## In a NetworkPolicy, two selectors are AND and two entries are OR
 
-### Guardrails
-
-Team namespaces get guardrails through labels Argo CD sets when it creates them:
-- **Pod Security Admission's `restricted` profile.**
-- **Kyverno CEL policies:** no `:latest`, approved registries only, and resource requests required.
-- **Keyless image signing.** CI signs images with cosign using its GitHub identity, and Kyverno only admits `ghcr.io/kushan94` images signed by this repo's workflows on `main`. There are no signing keys to store or rotate.
-
-The composition sets secure defaults, so anything created through the golden path passes. When a policy refuses something, the reason shows up in the `WebService`'s `Synced` condition, not in a log nobody reads.
-
-### Network isolation
-
-Each `WebService` gets a NetworkPolicy:
-- **Inbound:** its own namespace, Prometheus and, for public services, the load balancer's subnets.
-- **Outbound:** DNS, its own namespace and its database.
-
-Anything else is declared:
+Each service's NetworkPolicy lets in its own namespace, Prometheus and the load balancer, and anything else is declared:
 
 ```yaml
 spec:
@@ -242,82 +131,52 @@ spec:
   allowTo:              # what it calls
     - team: billing
       service: invoices
-  allowInternet: true   # public internet; private ranges, including 169.254.169.254, stay blocked
+  allowInternet: true   # public internet; private ranges stay blocked
 ```
 
-Two traps are worth knowing:
+"Billing's invoices service" has to put the namespace selector and the pod selector in the same `from` entry. Split into two entries, any pod named `invoices` in any namespace gets in. My live test included exactly such a pod, and it was blocked.
 
-- **One entry with two selectors is AND; two entries are OR.** "Billing's invoices service" has to put the namespace and pod selectors in the same `from` entry. Split into two entries, any pod named `invoices` in any namespace would get in. My live test included exactly such a pod, and it was blocked.
-- **Don't trust a label the team controls.** To share one Backstage ID across environments, the ID comes from a label on the `WebService`, so any team could claim another team's. Network rules use two labels instead. One is a team label that Argo CD puts on namespaces, which teams can't change, since the Argo CD project only lets them create `WebService`s. The other is the name label the composition puts on pods.
+The second trap was trusting a label the team controls. To share one Backstage ID across environments, the ID comes from a label on the `WebService`, which any team could set to claim another team's. The network rules use two labels instead: one that Argo CD puts on namespaces, which teams can't change, and the name label the composition puts on pods.
 
-Also, the VPC CNI ignores NetworkPolicies unless enforcement is turned on in the add-on, without saying so.
+And the VPC CNI ignores NetworkPolicies unless enforcement is turned on in the add-on, without saying so.
 
-## 6. Seeing your service: metrics, logs, alerts and cost
+## Tests that pass for the wrong reason
 
-Everything about a service is found through one label, `backstage.io/kubernetes-id`, which the composition puts on every pod, including the database's:
-- **Dashboard:** one Grafana dashboard serves every service, picked from a dropdown.
-- **Alerts:** each alert carries the service and environment, and links to that dashboard.
-- **Logs:** Alloy labels each log line with the service.
-- **Cost:** OpenCost's figures are grouped by service.
+A test that fails for the wrong reason looks exactly like a pass. Mine did:
 
-Developers set none of it up.
+- Four of my `yq` assertions passed by luck, because `select(...) | A and B` checks `B` against every document.
+- An Argo CD permission check returned 415, not the 403 I expected, because I'd left out a content type.
+- A Terraform validation passed on an empty folder. I'd run it in Docker on my Mac, and Docker only shares my home directory, so the container saw nothing and found nothing wrong.
 
-- **Metrics:** kube-prometheus-stack, with an optional `metrics` field for a service's own metrics.
-- **Alerts:** `WebServiceDown` and `WebServiceRestarting` per service, unit-tested with promtool. On EKS, a deliberately broken service fired in Slack after exactly 5 minutes, and the fix sent the resolved message within a minute. One subtlety: CloudNativePG pods carry the service's label too, so "down" only counts pods owned by a ReplicaSet. Otherwise a healthy database would hide a dead app.
-- **Logs:** Loki stores 7 days, in S3 on EKS, so logs outlive the cluster. Alloy ships them from every node.
-- **Cost:** OpenCost prices each container's allocation at its node's price. A recording rule sums that per service and environment.
+Each of those is the same failure. Now I break the thing on purpose and check that the test notices, and I check that the tool actually saw the input.
 
-The cost work produced my favourite bug. The recording rule passed its unit test the first time. On a real cluster it returned nothing, because OpenCost publishes its own copy of `kube_pod_labels`. With two copies, Prometheus refuses every join on pod labels as "many-to-many". That included the existing alerts, which would have silently stopped working the moment OpenCost was installed.
+## Writing runbooks audited my platform
 
-The fix had its own twist. With the duplicate turned off, OpenCost then had no prices at all. I first blamed the setting I'd just changed. The real cause was in its log all along: it stores price data in `/var/configs`, and its container's filesystem is read-only. After both fixes, a pod with 0.25 CPU and 256 MiB cost $0.008962 an hour, exactly the hand calculation.
+The newest part is a dashboard and an assistant for diagnosing the cluster. The dashboard shows nodes, namespaces, Argo CD applications, warnings and the pods that need attention. Next to each problem is a Diagnose button, and it opens an assistant: a Claude model with read-only tools for pods, events, logs, a fixed list of objects and Prometheus. Its role can't write, and it can't read Secrets.
 
-## 7. How I tested it
+Because a diagnosis costs money, it has limits: a token budget after which it must answer from what it has, a daily spend cap, a few minutes of caching for repeats, and a log line for every question with its cost.
 
-Everything was built on kind first, from the same root application. CloudNativePG stands in for RDS, and the AWS-only parts are switched off by one Helm value.
+To teach it this platform, I wrote nine short runbooks (crash loops, image pulls, pending pods, network blocks and so on) that it loads when the symptoms match. A script checks every concrete claim in them against the real composition and policies, so a runbook fails the check when the platform changes under it.
 
-`make test` needs no cluster:
-- **Rendering:** it renders the composition for each runtime, database class, profile and environment, and validates the output against the providers' schemas.
-- **Policies:** `kyverno test` runs the admission policies against sample resources.
-- **Rules:** `promtool` unit-tests the alert and cost rules.
-- **Environments and templates:** it builds every environment with Kustomize, and renders the Backstage template the way Backstage does.
+Writing them found two gaps in my own platform:
 
-Each test earned its place. I broke something on purpose, and checked the matching test failed.
+- **A service's resources are fixed.** Every service gets a 256Mi memory limit, and a `WebService` has no field to change it. A runbook can't tell a developer to raise the limit, because there's nothing to raise.
+- **The composition adds no readiness or liveness probes.** A pod counts as ready as soon as its container runs.
 
-For runtime behaviour, I used **throwaway kind clusters** with their own kubeconfig, deleted afterwards:
-- Does a NetworkPolicy really block a call?
-- Does the autoscaler scale? Under load it went from 2 to 5 replicas within a minute.
-- Can Argo CD adopt its own Helm release?
-- Do logs arrive under the right service?
+I'd been building the platform for two weeks without noticing either. I noticed when I sat down to write down what it actually does.
 
-That's where the most valuable problems showed up, ones every offline check had passed:
-- OpenCost's two bugs.
-- A log label that would have started a new stream on every container restart.
-- An amd64-only Kustomize image that crashed now and then under emulation on my Mac.
+I should be honest about the state of it. The tools are tested against deliberately broken workloads on kind, and the loop and the limits against a scripted model. The comparison of runbooks on against off runs against a stand-in for the API, which tests the harness and not the model. **I haven't yet run it against the real model, so I can't tell you how often it's right.** It also has no login yet, so it isn't deployed.
 
-**Lesson: make sure a test fails for the reason you think.** Several of mine passed or failed for the wrong reason:
-- An Argo CD permission check returned 415, not 403, because I'd left out a content type.
-- A password comparison failed because the AWS CLI's text output adds a newline.
-- Four of my yq assertions passed by luck, because `select(...) | A and B` checks `B` against every document. A stray `false` in the output was the only sign.
+## Where it stands
 
-A test that fails for the wrong reason looks exactly like a pass.
+- **Two shapes, one switch.** A `profile` input picks between them. `study` is two zones, one NAT gateway and two nodes, at about $0.40 an hour. `production` is three zones with a NAT gateway and a node in each, Multi-AZ RDS, more replicas of the platform's components and backups, at roughly $0.60 an hour. Even production is destroyed every night.
+- **On EKS:** the architecture, both runtimes, databases, guardrails, metrics and alerts. A deliberately broken service fired in Slack after exactly five minutes, and the fix sent the resolved message within one.
+- **On kind only, so far:** the hardening work. That covers availability, network enforcement, environments, autoscaling, logs and cost. Its EKS session is next.
+- **Waiting on AWS:** GitHub OIDC for CI and Karpenter, both blocked by that organization policy.
+- **Not done:** one AWS account is not a production setup, and a real platform would separate accounts under AWS Organizations.
 
-## 8. Where it stands
-
-- **Two shapes, one switch.** A `profile` input picks between them.
-  - `study`, what I run day to day: two AZs, one NAT gateway, two nodes and single-AZ databases, at about $0.40 an hour.
-  - `production`: three AZs with a NAT gateway and node in each, Multi-AZ RDS, more replicas of the platform's components, and backups. It's roughly $0.60 an hour.
-- **Still ephemeral.** Even the production shape is destroyed every night. Logs and backups survive for 7 days.
-- **Waiting on AWS:** GitHub OIDC for CI (built, in a pull request), and Karpenter, both blocked by the Free plan organization's policy.
-- **One AWS account.** A real platform would separate accounts for production under AWS Organizations.
-- **Verification.** The architecture, both runtimes, databases, guardrails, metrics and alerts have run on EKS. The hardening work, from availability through cost, has passed its offline tests and live tests on kind, and its EKS session is next.
-
-What carries over to any platform is the shape:
-- one small API
-- Git as the only way to change anything
-- controllers doing the work
-- credentials that never sit in a repo or on a laptop
-- and tests that you've watched fail
+What carries over to any platform is the shape: one small API, Git as the only way to change anything, controllers doing the work, credentials that never sit in a repo or on a laptop, and tests you've watched fail.
 
 ---
 
-*All code, two dozen decision records, and notes on everything that broke: [github.com/kushan94/eks-internal-developer-platform](https://github.com/kushan94/eks-internal-developer-platform).*
+*All the code, two dozen decision records, and notes on everything that broke: [github.com/kushan94/eks-internal-developer-platform](https://github.com/kushan94/eks-internal-developer-platform).*
