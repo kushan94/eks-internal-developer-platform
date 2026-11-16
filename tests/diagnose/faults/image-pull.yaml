@@ -1,0 +1,19 @@
+# expect: ImagePullBackOff|ErrImagePull
+# answer: ErrImagePull|ImagePullBackOff|image.*(not found|pull)|no-such-tag
+# runbook: image-or-admission
+apiVersion: v1
+kind: Namespace
+metadata: {name: fault-image-pull}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: web, namespace: fault-image-pull}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app.kubernetes.io/name: web}}
+  template:
+    metadata: {labels: {app.kubernetes.io/name: web}}
+    spec:
+      containers:
+        - name: app
+          image: nginxinc/nginx-unprivileged:1.29-no-such-tag

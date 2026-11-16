@@ -1,0 +1,73 @@
+# A stand-in for the Claude API, for `scripts/diagnose-eval.sh --dry-run`. It
+# tests the plumbing around the model, not the model. It is deterministic: it
+# loads the fitting runbook if the assistant offers the tool, reads the pods,
+# and then answers correctly if it was given runbooks and wrongly if not, so a
+# dry run can check that the comparison tells the two apart.
+apiVersion: v1
+kind: Namespace
+metadata: {name: fake-anthropic}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: fake-anthropic, namespace: fake-anthropic}
+data:
+  server.py: |
+    import json, re
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    RUNBOOK = {"image-pull": "image-or-admission", "oom": "crash-or-oom", "crash-log": "crash-or-oom",
+               "unschedulable": "pending-or-unschedulable", "missing-secret": "missing-secret-or-config",
+               "blocked-traffic": "blocked-traffic"}  # bad-probe has none
+    ANSWER = {"image-pull": "ErrImagePull: the image tag does not exist.", "oom": "The container was OOMKilled: out of memory.",
+              "crash-log": "The app exits because DATABASE_URL is not set.", "bad-probe": "The readiness probe checks port 9999.",
+              "unschedulable": "No node has room: Insufficient cpu.", "missing-secret": "The secret db-credentials was not found.",
+              "blocked-traffic": "A NetworkPolicy blocks the client."}
+
+    def blocks(m):
+        c = m["content"]
+        return c if isinstance(c, list) else [{"type": "text", "text": c}]
+
+    class H(BaseHTTPRequestHandler):
+        def do_POST(self):
+            req = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            msgs = req["messages"]
+            first = " ".join(b.get("text", "") for b in blocks(msgs[0]))
+            fault = (re.search(r"namespace fault-([a-z-]+)", first) or [None, "unknown"])[1]
+            results = sum(1 for m in msgs for b in blocks(m) if b.get("type") == "tool_result")
+            tools = [t["name"] for t in req.get("tools", [])]
+            has_runbooks = "load_runbook" in tools
+            if results == 0 and has_runbooks and fault in RUNBOOK:
+                content, stop = [{"type": "tool_use", "id": "toolu_1", "name": "load_runbook", "input": {"name": RUNBOOK[fault]}}], "tool_use"
+            elif results == (1 if has_runbooks and fault in RUNBOOK else 0):
+                content, stop = [{"type": "tool_use", "id": "toolu_2", "name": "list_pods", "input": {"namespace": "fault-" + fault}}], "tool_use"
+            else:
+                text = ANSWER.get(fault, "unknown") if has_runbooks else "I could not determine the cause."
+                content, stop = [{"type": "text", "text": text}], "end_turn"
+            body = json.dumps({"id": "msg_fake", "type": "message", "role": "assistant", "model": req["model"], "content": content,
+                               "stop_reason": stop, "stop_sequence": None, "usage": {"input_tokens": 1000, "output_tokens": 200}}).encode()
+            self.send_response(200); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(body)
+        def log_message(self, *a): pass
+    HTTPServer(("", 8080), H).serve_forever()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: fake-anthropic, namespace: fake-anthropic}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: fake-anthropic}}
+  template:
+    metadata: {labels: {app: fake-anthropic}}
+    spec:
+      containers:
+        - name: app
+          image: python:3.13-alpine
+          command: [python, /app/server.py]
+          volumeMounts: [{name: code, mountPath: /app}]
+      volumes: [{name: code, configMap: {name: fake-anthropic}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: fake-anthropic, namespace: fake-anthropic}
+spec:
+  selector: {app: fake-anthropic}
+  ports: [{port: 8080}]
