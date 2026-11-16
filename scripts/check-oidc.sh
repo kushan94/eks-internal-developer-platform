@@ -9,8 +9,12 @@
 #      infrastructure only run from main.
 #   4. With --claims <run id>, the claims GitHub put in a real token (from the
 #      "OIDC claims" workflow) match what the trust policies compare.
+#   5. With --terraform, Terraform itself (in Docker, in a copy under .test/)
+#      renders the same subject prefix and roles this script assumes. This
+#      script reads the HCL as text, so a mistake in an expression could
+#      otherwise slip past it. The first run downloads the AWS provider.
 #
-# Usage: scripts/check-oidc.sh [--claims <run id>]
+# Usage: scripts/check-oidc.sh [--claims <run id>] [--terraform]
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -20,21 +24,25 @@ pass() { echo "  PASS  $*"; }
 fail() { echo "  FAIL  $*"; failures=$((failures + 1)); }
 note() { echo "  note  $*"; }
 
-REPO="$(sed -n '/variable "github_repo"/,/^}/p' "$TF" | sed -n 's/^ *default *= *"\(.*\)".*/\1/p')"
-[ -n "$REPO" ] || { echo "couldn't read github_repo from $TF"; exit 1; }
+default_of() { sed -n "/variable \"$1\"/,/^}/p" "$TF" | sed -n 's/^ *default *= *"\{0,1\}\([^"]*\)"\{0,1\} *$/\1/p'; }
+REPO="$(default_of github_repo)" OWNER_ID="$(default_of github_owner_id)" REPO_ID="$(default_of github_repo_id)"
+[ -n "$REPO" ] && [ -n "$OWNER_ID" ] && [ -n "$REPO_ID" ] || { echo "couldn't read github_repo, github_owner_id and github_repo_id from $TF"; exit 1; }
+# GitHub puts the owner's and the repository's numeric IDs in the subject (immutable subjects).
+prefix_for() { echo "repo:${1%%/*}@$OWNER_ID/${1#*/}@$REPO_ID"; }
+PREFIX="$(prefix_for "$REPO")"
 
 # role -> environments, from the Terraform: lines like  apply = ["aws-apply", "aws-destroy"]
 roles() { sed -n '/github_roles = {/,/^  }/p' "$TF" | sed -n 's/^ *\([a-z-]*\) *= *\[\(.*\)\].*/\1 \2/p' | tr -d '",'; }
 envs_of() { roles | awk -v r="$1" '$1 == r { $1 = ""; print $0 }'; }
 # The subject claim a job in an environment presents. The trust policies compare it with StringEquals.
-sub_for() { echo "repo:$REPO:environment:$1"; }
+sub_for() { echo "$PREFIX:environment:$1"; }
 accepts() { # role subject: does the trust policy for this role accept this subject?
   local env
   for env in $(envs_of "$1"); do [ "$(sub_for "$env")" = "$2" ] && return 0; done
   return 1
 }
 
-echo "1. What each role's trust policy accepts (repo $REPO)"
+echo "1. What each role's trust policy accepts (subjects start with $PREFIX)"
 # What each role should accept. Changing this is changing who can get what.
 want() { case "$1" in plan) echo "aws-plan" ;; apply) echo "aws-apply aws-destroy" ;; image-push) echo "aws-build" ;; esac; }
 for role in plan apply image-push; do
@@ -55,10 +63,12 @@ check_sub "a job in aws-plan" "$(sub_for aws-plan)" "plan"
 check_sub "a job in aws-apply" "$(sub_for aws-apply)" "apply"
 check_sub "a job in aws-destroy (the nightly destroy)" "$(sub_for aws-destroy)" "apply"
 check_sub "a job in aws-build" "$(sub_for aws-build)" "image-push"
-check_sub "a job with no environment, on main" "repo:$REPO:ref:refs/heads/main" ""
-check_sub "a pull request job with no environment" "repo:$REPO:pull_request" ""
-check_sub "the same environment in another repository" "repo:someone-else/other:environment:aws-apply" ""
-check_sub "the right repository with different capitals" "repo:$(echo "$REPO" | tr '[:lower:]' '[:upper:]'):environment:aws-apply" ""
+check_sub "a job with no environment, on main" "$PREFIX:ref:refs/heads/main" ""
+check_sub "a pull request job with no environment" "$PREFIX:pull_request" ""
+check_sub "the same environment in another repository" "repo:someone-else@1/other@2:environment:aws-apply" ""
+check_sub "the same name with a different repository ID (a recreated repository)" "repo:${REPO%%/*}@$OWNER_ID/${REPO#*/}@1:environment:aws-apply" ""
+check_sub "the old subject format, without IDs" "repo:$REPO:environment:aws-apply" ""
+check_sub "the right repository with different capitals" "$(echo "$PREFIX" | tr '[:lower:]' '[:upper:]'):environment:aws-apply" ""
 check_sub "an environment nobody has heard of" "$(sub_for aws-admin)" ""
 
 grep -q 'values *= *\["sts.amazonaws.com"\]' "$TF" && pass "the trust policies require the audience sts.amazonaws.com" || fail "no audience condition"
@@ -80,10 +90,15 @@ for env in $used; do
 done
 [ $bad = 0 ] && pass "workflows use: $used (all trusted by a role)"
 
-echo "3. The GitHub environments"
+echo "3. GitHub: the subject format and the environments"
 if ! command -v gh > /dev/null || ! gh auth status > /dev/null 2>&1; then
-  note "gh isn't installed or logged in, so the environments weren't checked"
+  note "gh isn't installed or logged in, so GitHub wasn't checked"
 else
+  # What GitHub says the subject starts with, which is what the trust policies must match.
+  reported="$(gh api "repos/$REPO/actions/oidc/customization/sub" --jq '.sub_claim_prefix' 2> /dev/null)"
+  immutable="$(gh api "repos/$REPO/actions/oidc/customization/sub" --jq '.use_immutable_subject' 2> /dev/null)"
+  if [ "$reported" = "$PREFIX" ]; then pass "the Terraform subject prefix is the one GitHub reports for this repository"
+  else fail "Terraform expects '$PREFIX' but GitHub reports '${reported:-nothing}' (immutable subjects: ${immutable:-unknown})"; fi
   for env in $known; do
     if ! gh api "repos/$REPO/environments/$env" > /dev/null 2>&1; then fail "the GitHub environment $env doesn't exist, so no job could get its role"; continue; fi
     branches="$(gh api "repos/$REPO/environments/$env/deployment-branch-policies" --jq '[.branch_policies[].name] | join(",")' 2> /dev/null)"
@@ -97,8 +112,17 @@ else
   done
 fi
 
-if [ "${1:-}" = --claims ]; then
-  run="${2:?usage: --claims <run id>}"
+CLAIMS_RUN="" WITH_TERRAFORM=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --claims) CLAIMS_RUN="${2:?usage: --claims <run id>}"; shift 2 ;;
+    --terraform) WITH_TERRAFORM=1; shift ;;
+    *) echo "unknown argument: $1"; exit 2 ;;
+  esac
+done
+
+if [ -n "$CLAIMS_RUN" ]; then
+  run="$CLAIMS_RUN"
   echo "4. The claims in a real token (run $run)"
   logs="$(gh run view "$run" --repo "$REPO" --log 2> /dev/null | grep -o 'CLAIMS {.*}' | sed 's/^CLAIMS //')"
   [ -n "$logs" ] || fail "no CLAIMS lines in that run's log"
@@ -112,6 +136,30 @@ if [ "${1:-}" = --claims ]; then
     role="$(for r in plan apply image-push; do accepts "$r" "$sub" && echo "github-$r"; done | xargs)"
     note "$env would be accepted by: ${role:-no role}"
   done <<< "$logs"
+fi
+
+if [ -n "$WITH_TERRAFORM" ]; then
+  echo "5. Terraform renders what this script assumes"
+  # The trust document's values come from this expression, so it must use the prefix.
+  grep -qF 'values   = [for env in each.value : "${local.github_subject_prefix}:environment:${env}"]' "$TF" \
+    && pass "the trust policy's subject values are built from the subject prefix and the environment" \
+    || fail "the trust policy's subject values aren't built from local.github_subject_prefix"
+  if ! command -v docker > /dev/null; then note "docker isn't available, so Terraform wasn't run"; else
+    # Under the repository, because Docker only shares the home directory.
+    work=.test/oidc-terraform
+    rm -rf "$work"; mkdir -p "$work"
+    cp infra/bootstrap/*.tf "$work"/; cp infra/bootstrap/.terraform.lock.hcl "$work"/ 2> /dev/null
+    rendered="$(docker run --rm --entrypoint sh -v "$PWD/$work":/workspace -w /workspace "${TF_IMAGE:-hashicorp/terraform:latest}" -c \
+      'terraform init -backend=false -input=false > /dev/null 2>&1 && echo "jsonencode({prefix = local.github_subject_prefix, roles = local.github_roles})" | terraform console -no-color 2> /dev/null' \
+      | jq -r . 2> /dev/null | jq -c . 2> /dev/null)"
+    if [ -z "$rendered" ]; then fail "Terraform couldn't render the locals (run it by hand in $work to see why)"; else
+      [ "$(jq -r .prefix <<< "$rendered")" = "$PREFIX" ] && pass "Terraform's subject prefix is $PREFIX" || fail "Terraform renders the prefix '$(jq -r .prefix <<< "$rendered")', this script expects '$PREFIX'"
+      for role in plan apply image-push; do
+        tf_envs="$(jq -r --arg r "$role" '.roles[$r] | sort | join(" ")' <<< "$rendered")"
+        [ "$tf_envs" = "$(envs_of "$role" | xargs -n1 | sort | xargs)" ] && pass "Terraform renders github-$role's environments as: $tf_envs" || fail "github-$role: Terraform says '$tf_envs', this script read '$(envs_of "$role" | xargs)'"
+      done
+    fi
+  fi
 fi
 
 echo
