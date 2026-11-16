@@ -1,0 +1,13 @@
+# Must fail to render: resources and healthCheck are Kubernetes-only.
+apiVersion: platform.example.org/v1alpha1
+kind: WebService
+metadata:
+  name: reports
+  namespace: team-a
+spec:
+  runtime: ecs
+  image: nginxinc/nginx-unprivileged:1.29-alpine
+  port: 8080
+  replicas: 1
+  resources:
+    memory: 512Mi
