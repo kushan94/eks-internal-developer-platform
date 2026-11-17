@@ -247,6 +247,10 @@ test-diagnose: ## On a throwaway kind cluster: break workloads on purpose, check
 test-dashboard: ## Browser tests for the dashboard: every tab, deep links, keyboard, the assistant panel. Start scripts/dashboard-demo.sh first
 	cd tests/dashboard && npm install --silent --no-audit --no-fund && node tabs.e2e.mjs
 
+test-backstage: ## The Backstage launcher against a real Postgres in Docker (replicas start in turn, a stuck one is stopped, the database being down is survived), and its wiring through both Helm charts. Needs Docker and the internet
+	scripts/test-backstage-start.sh
+	scripts/test-backstage-chart.sh
+
 test-health: ## On a throwaway kind cluster: the real API server accepts the WebService's resources and healthCheck fields (CEL rules and all), and the probes and sizes behave on real pods (run make test first)
 	scripts/test-resources-and-health.sh
 
