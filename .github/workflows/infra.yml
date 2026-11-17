@@ -241,3 +241,8 @@ jobs:
             exit 1
           fi
           grep -E '^Destroy complete' destroy.log | tee -a "$GITHUB_STEP_SUMMARY"
+      # Kubernetes keeps a StatefulSet's volume claims, so Loki's volume outlived every
+      # destroy. The nodes are gone now, so the volumes are no longer attached.
+      - name: Delete volumes left by the cluster
+        working-directory: .
+        run: scripts/delete-k8s-volumes.sh idp
