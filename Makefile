@@ -131,6 +131,16 @@ test: ## Render the WebService composition for each runtime, database class, pro
 	! $(CROSSPLANE) render tests/render/xr-autoscaling-ecs.yaml \
 		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml \
 		--extra-resources platform/crossplane/aws/environment.example.yaml > /dev/null 2>&1
+	$(CROSSPLANE) render --include-full-xr tests/render/xr-resources.yaml \
+		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml > .test/resources.yaml
+	$(CROSSPLANE) render --include-full-xr tests/render/xr-resources-numbers.yaml \
+		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml > .test/resources-numbers.yaml
+	$(CROSSPLANE) render --include-full-xr tests/render/xr-health-check.yaml \
+		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml > .test/health-check.yaml
+	@# resources and healthCheck are Kubernetes-only: an ECS service with them must fail to render, with that reason.
+	$(CROSSPLANE) render tests/render/xr-resources-ecs.yaml \
+		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml \
+		--extra-resources platform/crossplane/aws/environment.example.yaml 2>&1 | grep -q "resources and healthCheck are only available for the kubernetes runtime"
 	$(CROSSPLANE) render --include-full-xr tests/render/xr-allow-from.yaml \
 		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml > .test/allow-from.yaml
 	! $(CROSSPLANE) render tests/render/xr-allow-from-ecs.yaml \
@@ -160,6 +170,13 @@ test: ## Render the WebService composition for each runtime, database class, pro
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/egress.yaml
 	@# The XRD refuses maxReplicas below minReplicas.
 	! $(CROSSPLANE) resource validate --cache-dir .test/cache .test/schemas tests/render/xr-autoscaling-invalid.yaml > /dev/null 2>&1
+	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/resources.yaml
+	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/resources-numbers.yaml
+	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/health-check.yaml
+	@# Memory and CPU outside the allowed range (including 0.5, which must be 500m), and a health check path without a slash, are refused.
+	for f in tests/render/xr-resources-invalid-*.yaml tests/render/xr-health-check-invalid.yaml; do \
+		if $(CROSSPLANE) resource validate --cache-dir .test/cache .test/schemas $$f > /dev/null 2>&1; then echo "$$f was accepted"; exit 1; fi; \
+	done
 	for f in .test/env-*.yaml; do $(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas $$f || exit 1; done
 	$(CROSSPLANE) resource validate --error-on-missing-schemas --cache-dir .test/cache .test/schemas .test/db-managed-ecs.yaml
 	@# yq assertions below: wrap everything after "select(...) |" in one pair of
@@ -178,6 +195,16 @@ test: ## Render the WebService composition for each runtime, database class, pro
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "NetworkPolicy") | ((.spec.egress[2].to[0].ipBlock.cidr == "10.42.0.0/16") and (.spec.egress[2].ports[0].port == 5432))' .test/egress.yaml
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "NetworkPolicy") | ((.spec.egress[3].to[0].namespaceSelector.matchLabels["platform.example.org/environment"] == "prod") and (.spec.egress[3].to[0].podSelector.matchLabels["app.kubernetes.io/name"] == "invoices"))' .test/egress.yaml
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "NetworkPolicy") | (.spec.egress[4].to[0].ipBlock.except | contains(["10.0.0.0/8", "169.254.0.0/16"]))' .test/egress.yaml
+	@# Resources: the platform's defaults when a service sets none, and its own memory and CPU when it does.
+	@# Setting memory requests the same amount as the limit.
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Deployment") | (.spec.template.spec.containers[0].resources | ((.requests.cpu == "50m") and (.requests.memory == "64Mi") and (.limits.memory == "256Mi")))' .test/kubernetes.yaml
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Deployment") | (.spec.template.spec.containers[0].resources | ((.requests.cpu == "250m") and (.requests.memory == "512Mi") and (.limits.memory == "512Mi")))' .test/resources.yaml
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Deployment") | (.spec.template.spec.containers[0].resources.limits | has("cpu") | not)' .test/resources.yaml
+	@# Plain numbers, which YAML reads as integers, work too, and come out as quantities.
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Deployment") | (.spec.template.spec.containers[0].resources | ((.requests.cpu == "1") and (.requests.memory == "1073741824") and (.limits.memory == "1073741824")))' .test/resources-numbers.yaml
+	@# Health: a port check by default, which is ready without restarting anything; with a path, all three HTTP probes.
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Deployment") | (.spec.template.spec.containers[0] | ((.readinessProbe.tcpSocket.port == "http") and (has("livenessProbe") | not) and (has("startupProbe") | not)))' .test/kubernetes.yaml
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Deployment") | (.spec.template.spec.containers[0] | ((.readinessProbe.httpGet.path == "/healthz") and (.livenessProbe.httpGet.path == "/healthz") and (.startupProbe.httpGet.path == "/healthz") and (.readinessProbe | has("tcpSocket") | not)))' .test/health-check.yaml
 	@# With autoscaling, the HorizontalPodAutoscaler owns the replica count.
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Deployment") | (.spec | has("replicas") | not)' .test/autoscaling.yaml
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "HorizontalPodAutoscaler") | (.spec.minReplicas == 2 and .spec.maxReplicas == 8)' .test/autoscaling.yaml
@@ -219,6 +246,9 @@ test-diagnose: ## On a throwaway kind cluster: break workloads on purpose, check
 
 test-dashboard: ## Browser tests for the dashboard: every tab, deep links, keyboard, the assistant panel. Start scripts/dashboard-demo.sh first
 	cd tests/dashboard && npm install --silent --no-audit --no-fund && node tabs.e2e.mjs
+
+test-health: ## On a throwaway kind cluster: the real API server accepts the WebService's resources and healthCheck fields (CEL rules and all), and the probes and sizes behave on real pods (run make test first)
+	scripts/test-resources-and-health.sh
 
 test-db: ## On a running cluster: create both database classes, log in, check isolation and cleanup
 	scripts/test-databases.sh $(KUBE_CONTEXT)

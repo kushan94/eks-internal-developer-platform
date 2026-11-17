@@ -1,6 +1,6 @@
 # expect: :9999
 # answer: 9999
-# runbook: none
+# runbook: health-checks
 apiVersion: v1
 kind: Namespace
 metadata: {name: fault-bad-probe}

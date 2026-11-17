@@ -86,6 +86,13 @@ spec:
             {{- $autoscaling := $xr.spec.autoscaling }}
             {{- if and $autoscaling (ne $runtime "kubernetes") }}{{ fail "autoscaling is only available for the kubernetes runtime for now" }}{{ end }}
             {{- if and (or $xr.spec.allowFrom $xr.spec.allowTo $xr.spec.allowInternet) (ne $runtime "kubernetes") }}{{ fail "allowFrom, allowTo and allowInternet are only available for the kubernetes runtime; ECS services use their security group" }}{{ end }}
+            {{- if and (or $xr.spec.resources $xr.spec.healthCheck) (ne $runtime "kubernetes") }}{{ fail "resources and healthCheck are only available for the kubernetes runtime for now" }}{{ end }}
+            {{- /* Without spec.resources a service requests 50m of CPU and 64Mi of memory and may use 256Mi.
+                   Setting memory requests the same amount as the limit, so the node reserves what it may use. */}}
+            {{- $resources := default dict $xr.spec.resources }}
+            {{- $cpuRequest := default "50m" $resources.cpu }}
+            {{- $memoryRequest := default "64Mi" $resources.memory }}
+            {{- $memoryLimit := default "256Mi" $resources.memory }}
             {{- $minReplicas := $xr.spec.replicas }}
             {{- with $autoscaling }}{{ $minReplicas = .minReplicas }}{{ end }}
             {{- if eq $runtime "kubernetes" }}
@@ -151,10 +158,33 @@ spec:
                           drop: [ALL]
                       resources:
                         requests:
-                          cpu: 50m
-                          memory: 64Mi
+                          cpu: {{ $cpuRequest | quote }}
+                          memory: {{ $memoryRequest | quote }}
                         limits:
-                          memory: 256Mi
+                          memory: {{ $memoryLimit | quote }}
+                      {{- /* Ready means the app answers. With a health check that is its path, which also
+                             restarts a stuck container; without one, a port that accepts connections. */}}
+                      {{- with $xr.spec.healthCheck }}
+                      startupProbe:
+                        httpGet: {path: {{ .path | quote }}, port: http}
+                        periodSeconds: 2
+                        failureThreshold: 30
+                      readinessProbe:
+                        httpGet: {path: {{ .path | quote }}, port: http}
+                        periodSeconds: 5
+                        timeoutSeconds: 2
+                        failureThreshold: 3
+                      livenessProbe:
+                        httpGet: {path: {{ .path | quote }}, port: http}
+                        periodSeconds: 10
+                        timeoutSeconds: 2
+                        failureThreshold: 3
+                      {{- else }}
+                      readinessProbe:
+                        tcpSocket: {port: http}
+                        periodSeconds: 5
+                        failureThreshold: 3
+                      {{- end }}
                       {{- if $dbClass }}
                       env:
                         {{- if eq $dbClass "in-cluster" }}

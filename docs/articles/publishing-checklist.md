@@ -32,4 +32,4 @@ Each traces to a record in the repo, so re-check it if the platform changes.
 - 29 pods per node, raised to 110 by prefix delegation (notes).
 - A pod with 0.25 CPU and 256 MiB cost $0.008962 an hour (ADR 0025).
 - A deliberately broken service fired in Slack after exactly five minutes (notes).
-- 256Mi memory limit and no probes: `platform/crossplane/webservice/composition.yaml`. `scripts/check-runbooks.sh` verifies the first.
+- The two gaps that writing the runbooks found, and that ADR 0027 fixed: `platform/crossplane/webservice/composition.yaml` and `definition.yaml`. `scripts/check-runbooks.sh` verifies the defaults, bounds and probe timings the runbooks state. The article says the fix hasn't run on EKS yet: update that after the EKS session.

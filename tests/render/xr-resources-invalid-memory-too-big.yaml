@@ -1,0 +1,12 @@
+# Must be refused by the XRD: memory-too-big.
+apiVersion: platform.example.org/v1alpha1
+kind: WebService
+metadata:
+  name: reports
+  namespace: team-a
+spec:
+  runtime: kubernetes
+  image: nginxinc/nginx-unprivileged:1.29-alpine
+  port: 8080
+  resources:
+    memory: 8Gi

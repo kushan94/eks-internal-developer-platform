@@ -156,14 +156,14 @@ The newest part is a dashboard and an assistant for diagnosing the cluster. The 
 
 Because a diagnosis costs money, it has limits: a token budget after which it must answer from what it has, a daily spend cap, a few minutes of caching for repeats, and a log line for every question with its cost.
 
-To teach it this platform, I wrote nine short runbooks (crash loops, image pulls, pending pods, network blocks and so on) that it loads when the symptoms match. A script checks every concrete claim in them against the real composition and policies, so a runbook fails the check when the platform changes under it.
+To teach it this platform, I wrote ten short runbooks (crash loops, image pulls, pending pods, network blocks and so on) that it loads when the symptoms match. A script checks every concrete claim in them against the real composition and policies, so a runbook fails the check when the platform changes under it.
 
 Writing them found two gaps in my own platform:
 
-- **A service's resources are fixed.** Every service gets a 256Mi memory limit, and a `WebService` has no field to change it. A runbook can't tell a developer to raise the limit, because there's nothing to raise.
-- **The composition adds no readiness or liveness probes.** A pod counts as ready as soon as its container runs.
+- **A service's resources were fixed.** Every service got a 256Mi memory limit, and a `WebService` had no field to change it. A runbook can't tell a developer to raise the limit, because there was nothing to raise.
+- **The composition added no readiness or liveness probes.** A pod counted as ready as soon as its container ran.
 
-I'd been building the platform for two weeks without noticing either. I noticed when I sat down to write down what it actually does.
+I'd been building the platform for two weeks without noticing either. I noticed when I sat down to write down what it actually does. Both are fixed now: a `WebService` can set its `resources` and a `healthCheck`, and every service gets at least a readiness check on its port. The change passed its tests against a real API server on kind, and hasn't run on EKS yet.
 
 I should be honest about the state of it. The tools are tested against deliberately broken workloads on kind, and the loop and the limits against a scripted model. The comparison of runbooks on against off runs against a stand-in for the API, which tests the harness and not the model. **I haven't yet run it against the real model, so I can't tell you how often it's right.** It also has no login yet, so it isn't deployed.
 

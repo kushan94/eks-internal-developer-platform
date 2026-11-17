@@ -1,0 +1,14 @@
+# Quantities written as plain numbers, which YAML reads as integers: one core, and memory in bytes.
+apiVersion: platform.example.org/v1alpha1
+kind: WebService
+metadata:
+  name: crunch
+  namespace: team-a
+spec:
+  runtime: kubernetes
+  image: nginxinc/nginx-unprivileged:1.29-alpine
+  port: 8080
+  replicas: 2
+  resources:
+    cpu: 1
+    memory: 1073741824

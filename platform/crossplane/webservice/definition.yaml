@@ -125,6 +125,56 @@ spec:
                     Numeric user ID to run the container as. Only needed when the
                     image names its user, such as USER app, instead of numbering it,
                     because Kubernetes can then not check that it isn't root.
+                resources:
+                  type: object
+                  description: >-
+                    CPU and memory for each copy of the service. Leave it out for the
+                    platform's defaults: 50m of CPU and 64Mi of memory requested, and a
+                    256Mi memory limit. There is no CPU limit, so a busy service can use
+                    spare CPU. Kubernetes runtime only.
+                  properties:
+                    cpu:
+                      x-kubernetes-int-or-string: true
+                      maxLength: 12
+                      anyOf:
+                        - type: integer
+                        - type: string
+                      description: >-
+                        CPU to request, between 10m and 2 cores, such as 250m or 1. Write
+                        a fraction of a core in millicores (500m, not 0.5). The scheduler
+                        reserves it, and autoscaling measures use against it.
+                      x-kubernetes-validations:
+                        - rule: "isQuantity(string(self)) && quantity(string(self)).compareTo(quantity('10m')) >= 0 && quantity(string(self)).compareTo(quantity('2')) <= 0"
+                          message: cpu must be from 10m to 2 cores, such as 250m or 1. Write a fraction in millicores (500m, not 0.5)
+                    memory:
+                      x-kubernetes-int-or-string: true
+                      maxLength: 12
+                      anyOf:
+                        - type: integer
+                        - type: string
+                      description: >-
+                        Memory limit, between 32Mi and 4Gi, such as 512Mi. The same
+                        amount is requested, so the node reserves what the service may
+                        use. A container that goes over it is killed.
+                      x-kubernetes-validations:
+                        - rule: "isQuantity(string(self)) && quantity(string(self)).compareTo(quantity('32Mi')) >= 0 && quantity(string(self)).compareTo(quantity('4Gi')) <= 0"
+                          message: memory must be from 32Mi to 4Gi, such as 512Mi
+                healthCheck:
+                  type: object
+                  description: >-
+                    How Kubernetes tells that the service is ready for traffic and still
+                    alive. Without it, a service is ready once its port accepts
+                    connections. With it, the path is called over HTTP: a 2xx or 3xx
+                    answer means ready, a container that stops answering is restarted,
+                    and a slow start gets up to a minute before that can happen.
+                    Kubernetes runtime only.
+                  required: [path]
+                  properties:
+                    path:
+                      type: string
+                      maxLength: 200
+                      pattern: '^/[-A-Za-z0-9._~/%]*$'
+                      description: HTTP path on the service's port, such as /healthz.
                 metrics:
                   type: object
                   description: >-

@@ -37,7 +37,7 @@ Then open http://localhost:8080. `go run . evidence <namespace>` prints what the
 ## Runbooks
 The assistant can load **runbooks** from [`runbooks/`](runbooks/): short guides to common failures, written for this platform. They say what the composition sets, which policies apply, how to tell similar causes apart, and what the fix is in Git. It sees only their names and descriptions at first, and loads one when the symptoms match, so the prompt stays small as the set grows. The page shows each load in the timeline.
 
-Current runbooks: `crash-or-oom`, `image-or-admission`, `pending-or-unschedulable`, `missing-secret-or-config`, `blocked-traffic`, `webservice-not-ready`, `argocd-out-of-sync`, `node-problems`, `database-connection`.
+Current runbooks: `crash-or-oom`, `image-or-admission`, `pending-or-unschedulable`, `missing-secret-or-config`, `blocked-traffic`, `webservice-not-ready`, `argocd-out-of-sync`, `node-problems`, `database-connection`, `health-checks`.
 
 To add or change one, edit the file (front matter: `name`, `description`, `tools`), and run `make test-assistant`. It checks the format, that the tools named exist, and, with `scripts/check-runbooks.sh`, that what the runbook says about the platform is still true: the `WebService` fields, the resource sizes, the policy names, and the messages the composition emits. A runbook that goes stale fails the check. `RUNBOOKS=off` runs the assistant without them, to measure what they add.
 

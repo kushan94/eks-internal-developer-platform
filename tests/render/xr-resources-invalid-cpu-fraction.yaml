@@ -1,0 +1,12 @@
+# Must be refused by the XRD: a fraction of a core is written in millicores (500m), not 0.5.
+apiVersion: platform.example.org/v1alpha1
+kind: WebService
+metadata:
+  name: reports
+  namespace: team-a
+spec:
+  runtime: kubernetes
+  image: nginxinc/nginx-unprivileged:1.29-alpine
+  port: 8080
+  resources:
+    cpu: 0.5
