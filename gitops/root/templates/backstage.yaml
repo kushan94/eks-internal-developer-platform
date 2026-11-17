@@ -22,6 +22,21 @@ spec:
             repository: idp/backstage
             tag: {{ .Values.backstage.imageTag | quote }}
           args: ["--config", "app-config.yaml", "--config", "app-config.production.yaml"]
+          # Replicas start one at a time, through files/backstage-start.js. Two starting
+          # against the session's new database corrupted a migration lock table, and
+          # Backstage was never ready while nothing restarted it. See ADR 0028.
+          command: ["node", "/launcher/start.js", "node", "packages/backend"]
+          extraEnvVars:
+            - name: NODE_PATH
+              value: /app/node_modules
+          extraVolumes:
+            - name: launcher
+              configMap:
+                name: backstage-start
+          extraVolumeMounts:
+            - name: launcher
+              mountPath: /launcher
+              readOnly: true
           # backstage-argocd is created by `make argocd-backstage-token`.
           extraEnvVarsSecrets: [backstage-github-app, backstage-database, backstage-argocd]
           resources:
@@ -39,6 +54,15 @@ spec:
               sectionName: https
           hostnames: [backstage.{{ .Values.domain }}]
         extraDeploy:
+          # The launcher, from gitops/root/files/. It must not contain two opening
+          # braces in a row: this chart renders it once and the Backstage chart again.
+          - apiVersion: v1
+            kind: ConfigMap
+            metadata:
+              name: backstage-start
+            data:
+              start.js: |
+{{ .Files.Get "files/backstage-start.js" | indent 16 }}
           # Read-only access for the Kubernetes plugin. Leaves out ConfigMaps
           # and Secrets, which can hold settings people shouldn't browse.
           - apiVersion: rbac.authorization.k8s.io/v1
