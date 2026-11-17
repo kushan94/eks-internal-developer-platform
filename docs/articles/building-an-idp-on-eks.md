@@ -8,7 +8,7 @@ I did it because the platform runs on AWS credits, and the EKS control plane alo
 
 The platform lets a developer write one small file and get a service with a database, a public URL, dashboards, alerts and network isolation. I built it from an empty AWS account with Crossplane, Argo CD and a self-hosted Backstage, to learn how an internal developer platform fits together. This is the write-up, for platform, DevOps and cloud engineers, including what broke. The code, with a decision record for every choice, is at [github.com/kushan94/eks-internal-developer-platform](https://github.com/kushan94/eks-internal-developer-platform).
 
-> A lot of the hardening work has run on a local kind cluster and not yet on EKS. I'll say which is which as I go.
+> The hardening work ran on kind first, and then on EKS in one session on the production shape. I'll say what that found, and what still hasn't been tried.
 
 ## What a developer gets
 
@@ -61,7 +61,7 @@ I chose Crossplane because I wanted the developer API to be a Kubernetes resourc
 
 **Destroy needs as much care as create.** Controllers still running during `terraform destroy` recreated what I was deleting: the load balancer controller rebuilt an ALB, and ExternalDNS rewrote records. The destroy now removes their IAM permissions first.
 
-**Backups have to outlive the cluster.** In the production shape, RDS keeps seven days of automated backups after the instance is deleted, which is what makes them useful, and in-cluster databases get EBS snapshots. Each has a restore drill script that writes a marker row, restores to a new instance, checks the row and times it. Those drills haven't run on EKS yet.
+**Backups have to outlive the cluster.** In the production shape, RDS keeps seven days of automated backups after the instance is deleted, which is what makes them useful, and in-cluster databases get EBS snapshots. Each has a restore drill script that writes a marker row, restores to a new instance, checks the row and times it. On EKS, the in-cluster database was backed up in under two minutes and restored in 34 seconds, and a point-in-time restore of the shared RDS server was available in about eight minutes, each with its marker row intact.
 
 **And a scheduled workflow is a safety net, not a timer.** GitHub has run my 22:00 destroy as late as 03:56. Once I started a session at 21:55, and the destroy queued behind my apply and would have torn the cluster down mid-test.
 
@@ -146,6 +146,7 @@ A test that fails for the wrong reason looks exactly like a pass. Mine did:
 
 - Four of my `yq` assertions passed by luck, because `select(...) | A and B` checks `B` against every document.
 - An Argo CD permission check returned 415, not the 403 I expected, because I'd left out a content type.
+- My first network isolation test on EKS used the wrong Service port, so every "blocked" result would have been the same with no policy at all. A block test needs a control that proves the target is reachable otherwise.
 - A Terraform validation passed on an empty folder. I'd run it in Docker on my Mac, and Docker only shares my home directory, so the container saw nothing and found nothing wrong.
 
 Each of those is the same failure. Now I break the thing on purpose and check that the test notices, and I check that the tool actually saw the input.
@@ -163,16 +164,30 @@ Writing them found two gaps in my own platform:
 - **A service's resources were fixed.** Every service got a 256Mi memory limit, and a `WebService` had no field to change it. A runbook can't tell a developer to raise the limit, because there was nothing to raise.
 - **The composition added no readiness or liveness probes.** A pod counted as ready as soon as its container ran.
 
-I'd been building the platform for two weeks without noticing either. I noticed when I sat down to write down what it actually does. Both are fixed now: a `WebService` can set its `resources` and a `healthCheck`, and every service gets at least a readiness check on its port. The change passed its tests against a real API server on kind, and hasn't run on EKS yet.
+I'd been building the platform for two weeks without noticing either. I noticed when I sat down to write down what it actually does. Both are fixed now: a `WebService` can set its `resources` and a `healthCheck`, and every service gets at least a readiness check on its port. It passed its tests on kind, and then on EKS: a service with a good health path came up Ready with its own sizes, and one with a bad path was reported not Ready, with an event naming the 404, where before it would have looked healthy.
 
 I should be honest about the state of it. The tools are tested against deliberately broken workloads on kind, and the loop and the limits against a scripted model. The comparison of runbooks on against off runs against a stand-in for the API, which tests the harness and not the model. **I haven't yet run it against the real model, so I can't tell you how often it's right.** It also has no login yet, so it isn't deployed.
+
+## The first session on the production shape found four bugs
+
+The hardening work had only ever run on a local cluster. A single session on the production profile found four bugs that nothing local could have, and every one was in something I'd already called done.
+
+**Backstage never became ready.** The production shape runs two replicas, and the database is new every session. Both replicas ran the same migrations at once, and the race wrote one of knex's lock rows twice. With two rows, knex can never take its lock, so one plugin failed to start for good. Backstage's liveness endpoint kept answering 200, so nothing restarted the pods, and restarting wouldn't have helped. Earlier sessions ran the one-replica shape, so I'd never seen it. The fix makes each replica take a Postgres advisory lock before it starts and hold it until it's ready. It's tested against a real Postgres, and it hasn't met EKS yet.
+
+**Both restore drills could never pass.** Newer `psql` prints a command tag for every statement, so each drill read `CREATE TABLE` or `INSERT 0 1` as its marker. The data was restored correctly every time, and the check was wrong.
+
+**Every promotion failed.** A leftover branch named `promote`, from the pull request mix-up, blocked every branch named `promote/...`, because Git can't hold both.
+
+**Each session left a volume behind.** Kubernetes keeps a StatefulSet's volume claims when it's deleted, so Loki's 5 GiB volume outlived every destroy. I only found it by counting what was left after the destroy. The destroy now sweeps these, though that step runs for the first time in the next real destroy.
+
+None of these were in the features. They were at the edges: first boot, a check's parsing, a stale branch, the order of a deletion. A platform you destroy every night crosses those edges every day, which is the point.
 
 ## Where it stands
 
 - **Two shapes, one switch.** A `profile` input picks between them. `study` is two zones, one NAT gateway and two nodes, at about $0.40 an hour. `production` is three zones with a NAT gateway and a node in each, Multi-AZ RDS, more replicas of the platform's components and backups, at roughly $0.60 an hour. Even production is destroyed every night.
-- **On EKS:** the architecture, both runtimes, databases, guardrails, metrics and alerts. A deliberately broken service fired in Slack after exactly five minutes, and the fix sent the resolved message within one.
-- **On kind only, so far:** the hardening work. That covers availability, network enforcement, environments, autoscaling, logs and cost. Its EKS session is next.
-- **Waiting on AWS:** GitHub OIDC for CI, which that organization policy blocks. Karpenter looked blocked too, but that was a false result, and I haven't tried it yet.
+- **On EKS:** the architecture, both runtimes, databases, guardrails, metrics and alerts, and a deliberately broken service that fired in Slack after exactly five minutes. Then, in one session on the production shape, the hardening work: replicas spread across zones, network isolation enforced by the VPC CNI in both directions, a real promotion through a pull request, autoscaling reading live metrics, logs per environment, cost per service, and both restore drills. That session ran about two hours, roughly $1.2 at the profile's hourly rate.
+- **Not tried yet:** the dashboard and assistant aren't deployed, because they have no login and I haven't run them against the real model. The Backstage fix hasn't met EKS. And I still don't have a clean time from nothing to a healthy platform, because that session's cluster setup waited out its 15 minutes on the Backstage bug.
+- **Waiting on AWS:** GitHub OIDC for CI, which that organization policy blocks. What it denies is anything that creates another way to sign in to the account, which looks deliberate, so I've stopped expecting it to lift. Karpenter looked blocked too, but that was a false result, and I haven't tried it yet.
 - **Not done:** one AWS account is not a production setup, and a real platform would separate accounts under AWS Organizations.
 
 What carries over to any platform is the shape: one small API, Git as the only way to change anything, controllers doing the work, credentials that never sit in a repo or on a laptop, and tests you've watched fail.

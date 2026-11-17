@@ -4,9 +4,9 @@ The article is `building-an-idp-on-eks.md`. Work through this before posting.
 
 ## Decisions and facts to settle
 - **The repository is private.** The article links to it as the place to read the code. Make it public first, or change the two links and the sentence that says the code is there.
-- **No rebuild time is stated.** The notes never recorded how long a session takes from nothing to a healthy platform. Time it in the EKS session and add one sentence to the opening.
-- **"Where it stands" must be updated after the EKS session.** Today it says the hardening work (availability, network enforcement, environments, autoscaling, logs, cost) has run on kind only, and that the restore drills haven't run on EKS. If the session passes, move those into the EKS list.
-- **The dashboard and assistant are in PR #52, and the OIDC testing in PR #53.** The article describes both. Merge them (squash #52, which carries an accidental binary in its history), or reword.
+- **No rebuild time is stated.** The 2026-11-17 production-shape session took 17 minutes for the infrastructure and 14 to destroy, but its cluster setup waited out its 15 minutes on the Backstage bug, so there is no clean "nothing to healthy" time. Once PR #59 (the Backstage fix) merges, the next session gives one. Add it to the opening.
+- **"Where it stands" reflects that session.** It says the hardening work ran on EKS, and lists what hasn't been tried: the dashboard and assistant, the Backstage fix on EKS, and a clean rebuild time. Update it after the next session.
+- **The article says the Backstage fix "hasn't met EKS yet"** (PR #59). Change that sentence after a production-profile session confirms it, or if the fix changes.
 - **The assistant has not been run against the real model.** The last section says so. If you run `scripts/diagnose-eval.sh --compare` with a key before publishing, add the result (diagnosed N of 7 without and with runbooks, and the cost). That is the most interesting number the article could have.
 
 ## Images
