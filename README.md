@@ -299,7 +299,7 @@ The bootstrap stack's state stays in `infra/bootstrap/terraform.tfstate`. It hol
 ## EKS sessions
 `make tf-validate` runs Terraform in Docker and does not touch AWS. Creating real resources needs the AWS CLI, Terraform and AWS credentials, and it costs money.
 
-The account is on the AWS Free plan in eu-north-1. The Free plan denies Spot instances, OIDC providers and `ec2:CreateFleet`, and only allows Free Tier-eligible instance types, so this setup uses on-demand `m7i-flex.large` nodes and Pod Identity, and can't use Karpenter or EKS Auto Mode. See [ADR 0003](docs/adr/0003-local-first-ephemeral-eks.md).
+The account is in eu-north-1, and a member of an organization whose policy denies creating OIDC providers (and, as far as the policy simulator can tell, Spot requests), refuses other regions, and only allows Free Tier-eligible instance types, so this setup uses on-demand `m7i-flex.large` nodes and Pod Identity. Karpenter and EKS Auto Mode first looked blocked, but that was a false result, and they haven't been tried. See [ADR 0003](docs/adr/0003-local-first-ephemeral-eks.md).
 
 Terraform always creates the VPC, a NAT gateway and the ECS cluster, which cost about $0.05 an hour. Setting `enable_eks=true` adds the EKS cluster, two on-demand nodes and the Pod Identity role for Crossplane, for about $0.38 an hour in total, including the VPC runner. A `$50` monthly budget alert, named `idp-monthly`, excludes credits.
 

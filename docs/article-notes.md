@@ -280,3 +280,16 @@ Copy this for each session:
   - I wrote several claims into runbooks that were wrong (how kind schedules a single node, what Argo CD prunes) and caught them by re-reading against the repo.
 - **AWS cost:** $0. Everything ran on kind, the policy simulator and GitHub. No Claude API calls were made: the assistant has only run against a scripted model and a stand-in API.
 
+### 2026-11-17: Exploring what the AWS account really allows
+- **Goal:** AWS Support hadn't answered the case about the blocked OIDC provider after several days, so find out what could be learned without them.
+- **What happened:**
+  - `aws organizations describe-organization` showed the account is a member of an organization whose management account is a different account, with a personal Gmail address. I had assumed AWS runs it. A member account can't read the policy (`DescribePolicy` is denied).
+  - The account has a generated name ("Big Ideas Live Here"), was created on 2026-11-05, and is signed in to through a role called `AccountFullAccessRole`. The console presents it as a project.
+  - I probed 24 actions with the policy simulator and the region supplied. Denied: `iam:CreateOpenIDConnectProvider`, `iam:CreateSAMLProvider`, `iam:CreateAccountAlias`, `iam:ListAccountAliases`, `sso:CreateInstance`, `rolesanywhere:CreateTrustAnchor` and `ec2:RequestSpotInstances`. Allowed: users, access keys, roles, `eks:CreateCluster`, `ec2:CreateFleet`, `bedrock:InvokeModel`. The denied ones are about creating ways to sign in to the account, which looks deliberate for this kind of account, not like a leftover Free plan limit.
+- **What surprised me:**
+  - **`ec2:CreateFleet` was never blocked.** I had reported it, and so Karpenter, as denied for days, from simulator runs without a region. With `eu-north-1` supplied it is allowed. The same mistake that made administrators look unable to create clusters, and it is in the notes from 2026-11-05 and 2026-11-13, in two ADRs, the README and the article draft. The ADRs and README are corrected, the article is corrected, and these old log entries are left as written.
+  - **`iam:ListAccountAliases`, a harmless read, is denied.** That is not what a Free plan resource limit looks like.
+  - Claude models are listed on Bedrock in `eu-north-1`, so the assistant could use Bedrock with Pod Identity and no API key, if the account's model access allows it. I haven't tried a call.
+- **Mistakes and fixes:** I repeated "the Free plan denies CreateFleet" in four documents without ever having checked it with a real call.
+- **AWS cost:** $0. Read-only calls and the policy simulator.
+

@@ -67,20 +67,20 @@ I chose Crossplane because I wanted the developer API to be a Kubernetes resourc
 
 ## The upgrade that didn't upgrade
 
-The account started on AWS's Free plan. Its organization policy denies Spot instances, IAM OIDC providers and `ec2:CreateFleet`, and only allows Free Tier instance types. My first EKS apply created the cluster, the VPC and a NAT gateway, then failed on the node group with `The specified instance type is not eligible for Free Tier`, and the half-built cluster cost money until I fixed it. `terraform plan` can't see a service control policy. You find out at apply, after the expensive parts exist.
+The account started on AWS's Free plan. Its organization policy denies IAM OIDC providers and, as far as the policy simulator can tell, Spot requests, and only allows Free Tier instance types. My first EKS apply created the cluster, the VPC and a NAT gateway, then failed on the node group with `The specified instance type is not eligible for Free Tier`, and the half-built cluster cost money until I fixed it. `terraform plan` can't see a service control policy. You find out at apply, after the expensive parts exist.
 
 The limits shaped the design in good ways. No OIDC provider meant Pod Identity instead of IRSA, which turned out simpler. When I wanted production features, I upgraded to the Paid plan.
 
-The limits didn't lift. The account reported `PAID` and `ACTIVE`, but it stayed in the organization AWS uses for Free plan accounts, and its policy still denied OIDC and `CreateFleet` hours later. IAM's policy simulator shows this without creating anything:
+The limits didn't lift. The account reported `PAID` and `ACTIVE`, but it is a member of an AWS organization whose policy still denied OIDC hours later, and days later. IAM's policy simulator shows this without creating anything:
 
 ```sh
 aws iam simulate-principal-policy --policy-source-arn <your role ARN> \
-  --action-names iam:CreateOpenIDConnectProvider ec2:CreateFleet \
+  --action-names iam:CreateOpenIDConnectProvider ec2:RequestSpotInstances \
   --context-entries ContextKeyName=aws:RequestedRegion,ContextKeyValues=eu-north-1,ContextKeyType=string \
   --query 'EvaluationResults[].[EvalActionName,EvalDecision]' --output text
 ```
 
-That `--context-entries` line matters. The organization's policy depends on the region, and without it the simulator reports that even an administrator can't create a cluster. With it, I also learned the organization refuses the other regions I tried: `us-east-1`, `us-west-2` and `eu-west-1`.
+That `--context-entries` line matters. The organization's policy depends on the region, and without it the simulator reports that even an administrator can't create a cluster. With it, I also learned the organization refuses the other regions I tried: `us-east-1`, `us-west-2` and `eu-west-1`. And I had reported `ec2:CreateFleet`, and so Karpenter, as blocked for days from a run without the region. With the region supplied, `CreateFleet` is allowed. It never was blocked.
 
 **Lesson: read the account's limits before writing Terraform, and check that the thing you changed actually changed.**
 
@@ -172,7 +172,7 @@ I should be honest about the state of it. The tools are tested against deliberat
 - **Two shapes, one switch.** A `profile` input picks between them. `study` is two zones, one NAT gateway and two nodes, at about $0.40 an hour. `production` is three zones with a NAT gateway and a node in each, Multi-AZ RDS, more replicas of the platform's components and backups, at roughly $0.60 an hour. Even production is destroyed every night.
 - **On EKS:** the architecture, both runtimes, databases, guardrails, metrics and alerts. A deliberately broken service fired in Slack after exactly five minutes, and the fix sent the resolved message within one.
 - **On kind only, so far:** the hardening work. That covers availability, network enforcement, environments, autoscaling, logs and cost. Its EKS session is next.
-- **Waiting on AWS:** GitHub OIDC for CI and Karpenter, both blocked by that organization policy.
+- **Waiting on AWS:** GitHub OIDC for CI, which that organization policy blocks. Karpenter looked blocked too, but that was a false result, and I haven't tried it yet.
 - **Not done:** one AWS account is not a production setup, and a real platform would separate accounts under AWS Organizations.
 
 What carries over to any platform is the shape: one small API, Git as the only way to change anything, controllers doing the work, credentials that never sit in a repo or on a laptop, and tests you've watched fail.
