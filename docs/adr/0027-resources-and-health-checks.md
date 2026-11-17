@@ -39,4 +39,4 @@ Writing runbooks for the diagnostic assistant meant writing down what the platfo
 - **The caps are a platform decision:** 2 cores and 4Gi. A service that needs more means changing the XRD, which is a reason to talk about it.
 - **Not on EKS yet.** The probes and sizes ran on kind. On EKS the load balancer's own target health checks are separate and unchanged.
 - **The Backstage template doesn't offer the fields yet,** so they are written by hand.
-- **The assistant's runbooks need updating** once this merges. `crash-or-oom` says a service's memory limit can't be changed, and its drift check looks for the old literal in the composition, which is meant to fail and point at that.
+- **The assistant's runbooks change with it.** `crash-or-oom`, `pending-or-unschedulable`, `node-problems` and `webservice-not-ready` no longer say that a service can't change its resources, and a `health-checks` runbook is new, since the platform can now produce probe failures. The drift check verifies the defaults, the bounds and the probe timings, so it fails when they change again.

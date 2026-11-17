@@ -17,7 +17,7 @@ data:
 
     RUNBOOK = {"image-pull": "image-or-admission", "oom": "crash-or-oom", "crash-log": "crash-or-oom",
                "unschedulable": "pending-or-unschedulable", "missing-secret": "missing-secret-or-config",
-               "blocked-traffic": "blocked-traffic"}  # bad-probe has none
+               "blocked-traffic": "blocked-traffic", "bad-probe": "health-checks"}
     ANSWER = {"image-pull": "ErrImagePull: the image tag does not exist.", "oom": "The container was OOMKilled: out of memory.",
               "crash-log": "The app exits because DATABASE_URL is not set.", "bad-probe": "The readiness probe checks port 9999.",
               "unschedulable": "No node has room: Insufficient cpu.", "missing-secret": "The secret db-credentials was not found.",
