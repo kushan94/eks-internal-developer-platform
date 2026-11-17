@@ -256,3 +256,27 @@ Copy this for each session:
   - **Stacked pull requests merged into each other, not `main`.** #38 went into `main` first, then #39 to #49 each merged into the branch below it, so `main` only had #38. Nothing was lost: the top branch held every commit, and one more pull request (#50) brought them in.
   - **Server-side diff keeps solving the same problem.** Kyverno's CRDs, Argo CD's own secret and External Secrets' webhook certificates all have fields that something other than Git fills in.
 - **AWS cost:** $0 for building; everything ran on kind.
+
+### 2026-11-14 to 2026-11-16: A cluster dashboard with an AI assistant, and testing OIDC without the provider
+- **Goal:** Build a dashboard that shows the state of the cluster and diagnoses problems with an AI assistant, and test as much of the GitHub OIDC sign-in as possible while AWS still blocks the provider.
+- **What happened:**
+  - Built a Go service with a dashboard (Overview, Workloads, Nodes, Delivery, Events tabs) and an assistant behind a Diagnose button: a Claude model with read-only tools for pods, events, logs, a fixed list of objects and Prometheus. Its role has no write verbs and no access to Secrets.
+  - Added limits, because a diagnosis costs money: a token budget (at 70% the model must answer from what it has, so a long investigation ends with a partial answer instead of nothing), a daily spend cap, a concurrency limit, a cache for repeated questions, and a log line per diagnosis with its cost.
+  - Wrote nine runbooks the assistant loads when the symptoms match, and a script that checks their concrete claims (fields, resource sizes, policy names, quoted messages) against the real composition and policies.
+  - Built an eval: seven broken workloads on kind, and a `--compare` mode that diagnoses them without and then with the runbooks. A `--dry-run` mode runs the comparison against a stand-in for the Claude API, which tests the harness and not the model.
+  - For OIDC: a workflow that prints the claims in the token GitHub would present, a script that checks the role trust policies against it, and policy-simulator checks of what the CI identities may do.
+- **What surprised me:**
+  - **The real OIDC token's subject had the owner and repository IDs in it.** The repository uses immutable subjects, so the subject is `repo:OWNER@ID/NAME@ID:environment:...`, and my trust policies compared the name-only form. Every sign-in would have been refused after AWS lifted the block. A renamed or recreated repository now can't inherit the trust either.
+  - **Writing the runbooks found two gaps in my own platform.** Every service gets a fixed 256Mi memory limit and a `WebService` has no field to change it, and the composition adds no readiness or liveness probes.
+  - **The IAM policy simulator needs the region.** Without `aws:RequestedRegion`, even an administrator looked denied for every regional action, because the organization's policy depends on the region. It also showed the organization refuses `us-east-1`, `us-west-2` and `eu-west-1`.
+  - **My page's own Content-Security-Policy silently dropped every inline bar width,** so a 36% CPU bar showed full. Only the browser console said so. Widths are now set through the CSS object model.
+  - **A Terraform validation passed on an empty folder.** Docker on my Mac only shares the home directory, so a copy in `/private/tmp` mounted as nothing.
+  - **The dry run found that the Dockerfile didn't copy the runbooks,** so the image would not have built. A failed diagnosis also used up an hourly allowance although it cost nothing.
+- **Mistakes and fixes:**
+  - I committed a 17 MB compiled binary by letting `go build` write it into the source folder. It is removed and ignored, but it stays in that branch's history, so the pull request needs a squash merge.
+  - My stubbed answer in a browser test told the user to raise the memory limit in the `WebService`, which has no such field. The runbook now says so instead.
+  - A mutation test hung for many minutes once. It never reproduced with a timeout, so I suspect Docker.
+  - macOS's bash 3.2 has no associative arrays, which broke a script.
+  - I wrote several claims into runbooks that were wrong (how kind schedules a single node, what Argo CD prunes) and caught them by re-reading against the repo.
+- **AWS cost:** $0. Everything ran on kind, the policy simulator and GitHub. No Claude API calls were made: the assistant has only run against a scripted model and a stand-in API.
+

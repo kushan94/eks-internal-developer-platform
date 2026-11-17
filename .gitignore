@@ -8,3 +8,7 @@ crash.log
 .test/
 tfplan
 __pycache__/
+
+# A stray `go build` in apps/cluster-assistant writes the binary here.
+/apps/cluster-assistant/cluster-assistant
+node_modules/

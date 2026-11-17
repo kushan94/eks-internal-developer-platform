@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cluster dashboard</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%230969da' stroke-width='1.6' stroke-linejoin='round'%3E%3Cpath d='M12 2 3 7v10l9 5 9-5V7z'/%3E%3Cpath d='M3 7l9 5 9-5M12 12v10'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="app.css">
+<script src="app.js" defer></script>
+</head>
+<body>
+<header class="top">
+  <div class="top-row">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/></svg>
+      <div><h1>Cluster dashboard</h1><p id="subtitle" class="muted">Loading…</p></div>
+    </div>
+    <div class="top-actions">
+      <a id="pill" class="pill" href="#/overview" hidden></a>
+      <span id="updated" class="muted" aria-live="polite"></span>
+      <label class="switch"><input type="checkbox" id="auto" checked><span>Auto-refresh</span></label>
+      <button id="refresh" class="btn" type="button" title="Refresh now"><svg class="icon" id="refresh-icon" viewBox="0 0 24 24"></svg><span>Refresh</span></button>
+    </div>
+  </div>
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button class="tab" role="tab" id="tab-overview" data-tab="overview" aria-controls="panel-overview" type="button">Overview<span class="tab-badge" id="badge-overview" hidden></span></button>
+    <button class="tab" role="tab" id="tab-workloads" data-tab="workloads" aria-controls="panel-workloads" type="button">Workloads<span class="tab-badge" id="badge-workloads" hidden></span></button>
+    <button class="tab" role="tab" id="tab-nodes" data-tab="nodes" aria-controls="panel-nodes" type="button">Nodes<span class="tab-badge" id="badge-nodes" hidden></span></button>
+    <button class="tab" role="tab" id="tab-delivery" data-tab="delivery" aria-controls="panel-delivery" type="button">Delivery<span class="tab-badge" id="badge-delivery" hidden></span></button>
+    <button class="tab" role="tab" id="tab-events" data-tab="events" aria-controls="panel-events" type="button">Events<span class="tab-badge" id="badge-events" hidden></span></button>
+  </nav>
+</header>
+
+<div id="banner" class="banner" role="alert" hidden></div>
+
+<main id="app" aria-busy="true">
+  <div id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" tabindex="0" hidden>
+    <section id="kpis" class="kpis" aria-label="Summary"></section>
+    <div class="grid">
+      <section class="panel span-4" aria-labelledby="h-capacity">
+        <h2 id="h-capacity">Capacity <small class="muted">requested vs allocatable</small></h2>
+        <div id="capacity"></div>
+      </section>
+      <section class="panel span-8" aria-labelledby="h-charts">
+        <h2 id="h-charts">Last hour</h2>
+        <div id="charts" class="charts"></div>
+      </section>
+      <section class="panel span-7" aria-labelledby="h-problems">
+        <h2 id="h-problems">Needs attention <span id="problem-count" class="count"></span></h2>
+        <div id="problems"></div>
+      </section>
+      <section class="panel span-5" aria-labelledby="h-events">
+        <div class="panel-head"><h2 id="h-events">Latest warnings</h2><a class="link" href="#/events">All events</a></div>
+        <div id="events"></div>
+      </section>
+    </div>
+  </div>
+
+  <div id="panel-workloads" role="tabpanel" aria-labelledby="tab-workloads" tabindex="0" hidden>
+    <div class="grid">
+      <section class="panel span-12" aria-labelledby="h-ns">
+        <div class="panel-head">
+          <h2 id="h-ns">Namespaces</h2>
+          <div class="tools">
+            <label class="switch"><input type="checkbox" id="only-problems"><span>Only with problems</span></label>
+            <input id="ns-filter" class="input" type="search" placeholder="Filter namespaces" aria-label="Filter namespaces">
+          </div>
+        </div>
+        <div id="namespaces" class="tiles"></div>
+      </section>
+      <section class="panel span-12" aria-labelledby="h-pods">
+        <div class="panel-head">
+          <h2 id="h-pods">Pods <span id="pod-count" class="count"></span></h2>
+          <div class="tools">
+            <label class="switch"><input type="checkbox" id="pod-only-problems"><span>Only unhealthy</span></label>
+            <input id="pod-filter" class="input" type="search" placeholder="Filter pods" aria-label="Filter pods">
+          </div>
+        </div>
+        <div class="table-wrap"><table id="pods"></table></div>
+        <p id="pods-note" class="muted small"></p>
+      </section>
+    </div>
+  </div>
+
+  <div id="panel-nodes" role="tabpanel" aria-labelledby="tab-nodes" tabindex="0" hidden>
+    <div class="grid">
+      <section class="panel span-12" aria-labelledby="h-versions">
+        <h2 id="h-versions">Kubernetes versions</h2>
+        <div id="version"></div>
+      </section>
+      <section class="panel span-12" aria-labelledby="h-nodes">
+        <h2 id="h-nodes">Nodes</h2>
+        <div class="table-wrap"><table id="nodes"></table></div>
+      </section>
+    </div>
+  </div>
+
+  <div id="panel-delivery" role="tabpanel" aria-labelledby="tab-delivery" tabindex="0" hidden>
+    <div class="grid">
+      <section class="panel span-12" aria-labelledby="h-apps">
+        <h2 id="h-apps">Argo CD applications</h2>
+        <div class="table-wrap"><table id="apps"></table></div>
+      </section>
+    </div>
+  </div>
+
+  <div id="panel-events" role="tabpanel" aria-labelledby="tab-events" tabindex="0" hidden>
+    <div class="grid">
+      <section class="panel span-12" aria-labelledby="h-allevents">
+        <div class="panel-head">
+          <h2 id="h-allevents">Warning events <span id="event-count" class="count"></span></h2>
+          <div class="tools"><input id="ev-filter" class="input" type="search" placeholder="Filter events" aria-label="Filter events"></div>
+        </div>
+        <div id="ev-reasons" class="reasons" aria-label="Most common reasons"></div>
+        <div id="events-all"></div>
+        <p id="events-note" class="muted small"></p>
+      </section>
+    </div>
+  </div>
+</main>
+
+<div id="scrim" class="scrim" hidden></div>
+
+<aside id="drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" hidden>
+  <header class="drawer-head">
+    <div><p class="muted">Namespace</p><h2 id="drawer-title"></h2></div>
+    <div class="drawer-actions">
+      <button id="drawer-diagnose" class="btn primary" type="button"></button>
+      <button id="drawer-close" class="btn icon-btn" type="button" aria-label="Close"></button>
+    </div>
+  </header>
+  <div id="drawer-body" class="drawer-body"></div>
+</aside>
+
+<aside id="assistant" class="drawer wide" role="dialog" aria-modal="true" aria-labelledby="assistant-title" hidden>
+  <header class="drawer-head">
+    <div><p class="muted">Assistant · read-only</p><h2 id="assistant-title"></h2></div>
+    <button id="assistant-close" class="btn icon-btn" type="button" aria-label="Close"></button>
+  </header>
+  <div class="drawer-body">
+    <label for="question" class="label">What are you seeing? <span class="muted">(optional)</span></label>
+    <textarea id="question" class="input" rows="2" maxlength="1000" placeholder="e.g. It started failing after the last deploy"></textarea>
+    <div class="row">
+      <button id="run" class="btn primary" type="button"></button>
+      <button id="stop" class="btn" type="button" hidden>Stop</button>
+      <span class="muted small">Reads pods, events, logs, objects and metrics. It can't change anything. Each run uses the Claude API.</span>
+    </div>
+    <ol id="timeline" class="timeline" aria-live="polite"></ol>
+    <p id="note" class="note" role="status" hidden></p>
+    <div id="answer" class="answer" aria-live="polite"></div>
+    <p id="usage" class="muted small"></p>
+    <p id="budget" class="muted small"></p>
+  </div>
+</aside>
+</body>
+</html>
