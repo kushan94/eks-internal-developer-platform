@@ -224,6 +224,10 @@ test: ## Render the WebService composition for each runtime, database class, pro
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) '.spec' platform/observability/alerts/webservice.yaml > .test/alerts/webservice.yaml
 	docker run --rm --entrypoint promtool -v $(CURDIR):/repo -w /repo $(PROMETHEUS_IMAGE) check rules .test/alerts/webservice.yaml
 	docker run --rm --entrypoint promtool -v $(CURDIR):/repo -w /repo $(PROMETHEUS_IMAGE) test rules tests/alerts/webservice-test.yaml
+	@# Shell helpers, tested without AWS: the sweep for volumes a destroyed cluster leaves
+	@# behind (with a fake aws command), and how the restore drills read their marker.
+	scripts/test-delete-k8s-volumes.sh
+	scripts/test-drill-lib.sh
 	@# Alloy's log pipeline must parse.
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) '.data["config.alloy"]' platform/observability/logs/alloy-config.yaml > .test/config.alloy
 	docker run --rm -v $(CURDIR)/.test:/w $(ALLOY_IMAGE) fmt /w/config.alloy > /dev/null

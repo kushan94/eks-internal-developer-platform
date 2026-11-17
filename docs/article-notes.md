@@ -293,3 +293,22 @@ Copy this for each session:
 - **Mistakes and fixes:** I repeated "the Free plan denies CreateFleet" in four documents without ever having checked it with a real call.
 - **AWS cost:** $0. Read-only calls and the policy simulator.
 
+### 2026-11-17: Hardening verified on EKS, production profile
+- **Goal:** Run everything built on kind since 2026-11-13 on a real cluster for the first time, on the `production` profile: three zones, a node and NAT gateway in each, Multi-AZ RDS.
+- **What happened:**
+  - The Infrastructure workflow took 17 minutes (15:57 to 16:13 UTC), and destroy took 14 minutes (17:53 to 18:07). Cluster setup took 23 minutes, but 15 of those were its wait for Argo CD apps to become healthy, which timed out on Backstage, so there is still no clean "empty account to healthy platform" time.
+  - Verified on EKS: all 30 Argo CD apps healthy (including Argo CD managing itself, Loki, Alloy, OpenCost); visits in dev, staging and prod with public HTTPS; replicas spread across zones and disruption budgets; network isolation enforced by the VPC CNI in both directions; `make test-db` with the egress rules; metrics, per-environment logs and cost per service; the prod-replicas policy; autoscaling reading real CPU; and PR #55's probes and resources, including a bad health path being reported not Ready and restarted after its startup window.
+  - Both restore drills passed on EKS, for the first time. In-cluster database: backup in 1m51s, restore healthy in 34s. RDS point-in-time restore: available in 8m07s, with the marker row and all databases intact.
+  - A real dev-to-staging promotion went through a pull request, and staging rolled to the new image.
+- **What surprised me:**
+  - **Backstage's two replicas race on a brand-new database.** The production profile runs two, and the database is new every session. Both ran the catalog's migrations at once, and the race inserted the knex lock row twice in one plugin's database. With two rows, knex can never take the lock (`Migration table is already locked`), and Backstage's own liveness endpoint kept saying 200, so nothing restarted the pods. Restarting did not help. Deleting the duplicate row fixed it in 12 seconds. Earlier sessions ran the study profile, with one replica.
+  - **Both restore drills had a bug in how they read their marker.** Newer `psql` prints a command tag (`CREATE TABLE`, `INSERT 0 1`) for every statement, so taking the first or last line gave the wrong value. The RDS drill waited for a restore point "after" `INSERT 0 1`. The data was fine, and the check was wrong. Both now take the line that looks like a timestamp.
+  - **A stale branch named `promote` blocked every promotion.** Git can't hold `promote` and `promote/...`. It was the head of merged PR #44, left from the stacked pull request mix-up.
+  - **Loki's volume outlived the cluster.** Kubernetes keeps a StatefulSet's claims when it is deleted, so a 5 GiB volume was left behind, and one more would have been after every session.
+  - **RDS keeps automated backups of both instances after the destroy.** That is the intended behaviour, and it is what makes a restore possible afterwards.
+- **Mistakes and fixes:**
+  - My first network isolation test used the wrong Service ports (`hello` listens on 80, not 9898), so "blocked" meant nothing. I redid it with pod IPs and a control for every block.
+  - My lock-table query first looked at the wrong table names. The one that mattered had a prefix (`backstage_backend_public_keys__knex_migrations_lock`).
+  - A deletion of the leftover volume was refused by the permission check, correctly, since it had not been approved. It is left for the user to decide.
+- **AWS cost:** about two hours of the production profile at roughly $0.60 an hour, so around $1.2, plus a few minutes of the temporary RDS instance for the drill. That is an estimate from the hourly rate. Cost Explorer has the real number.
+

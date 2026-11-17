@@ -8,6 +8,7 @@
 #   5. deletes the copy and the marker, whatever happened
 # Usage: scripts/rds-restore-drill.sh [kube context]
 set -uo pipefail
+source "$(dirname "$0")/drill-lib.sh"
 
 CONTEXT="${1:-$(kubectl config current-context)}"
 SOURCE="${SOURCE:-idp-shared-postgres}"
@@ -67,7 +68,7 @@ if [ "$(jq -r .BackupRetentionPeriod <<<"$src")" = 0 ]; then
 fi
 
 echo "1. Writing a marker row"
-marker="$(run_sql "" "CREATE TABLE IF NOT EXISTS restore_drill (at timestamptz); INSERT INTO restore_drill VALUES (now()) RETURNING to_char(at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')" | tail -n 1)"
+marker="$(run_sql "" "CREATE TABLE IF NOT EXISTS restore_drill (at timestamptz); INSERT INTO restore_drill VALUES (now()) RETURNING to_char(at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')" | marker_line)"
 databases="$(run_sql "" "SELECT string_agg(datname, ',' ORDER BY datname) FROM pg_database WHERE NOT datistemplate")"
 if [ -n "$marker" ]; then pass "marker written at $marker, databases: $databases"; else fail "couldn't write the marker"; exit 1; fi
 
@@ -100,7 +101,7 @@ host="$(aws rds describe-db-instances --db-instance-identifier "$DRILL" --query 
 pass "restored and available in $(((SECONDS - start) / 60))m$(((SECONDS - start) % 60))s"
 
 echo "4. Checking the copy from inside the cluster"
-restored_marker="$(run_sql "$host" "SELECT to_char(max(at) AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') FROM restore_drill" | tail -n 1)"
+restored_marker="$(run_sql "$host" "SELECT to_char(max(at) AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') FROM restore_drill" | marker_line)"
 if [ "$restored_marker" = "$marker" ]; then pass "marker row is there ($restored_marker)"; else fail "marker row missing: got '$restored_marker'"; fi
 restored_dbs="$(run_sql "$host" "SELECT string_agg(datname, ',' ORDER BY datname) FROM pg_database WHERE NOT datistemplate")"
 if [ "$restored_dbs" = "$databases" ]; then pass "same databases: $restored_dbs"; else fail "databases differ: $restored_dbs"; fi

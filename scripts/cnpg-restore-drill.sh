@@ -8,6 +8,7 @@
 #   5. deletes the namespace, which deletes the backups and their snapshots
 # Usage: scripts/cnpg-restore-drill.sh [kube context]
 set -uo pipefail
+source "$(dirname "$0")/drill-lib.sh"
 
 CONTEXT="${1:-$(kubectl config current-context)}"
 NS=restore-drill
@@ -66,7 +67,7 @@ else
   fail "database not healthy after 15 minutes"
   exit 1
 fi
-marker="$(run_sql shop-db "CREATE TABLE restore_drill (at timestamptz); INSERT INTO restore_drill VALUES (now()) RETURNING to_char(at, 'YYYY-MM-DD HH24:MI:SS.US')" | head -n 1)"
+marker="$(run_sql shop-db "CREATE TABLE restore_drill (at timestamptz); INSERT INTO restore_drill VALUES (now()) RETURNING to_char(at, 'YYYY-MM-DD HH24:MI:SS.US')" | marker_line)"
 if [ -n "$marker" ]; then pass "marker written: $marker"; else fail "couldn't write the marker"; exit 1; fi
 
 echo "2. Backing up as EBS snapshots"
@@ -124,7 +125,7 @@ else
 fi
 
 echo "4. Checking the restored database"
-restored="$(run_sql shop-db-restored "SELECT to_char(max(at), 'YYYY-MM-DD HH24:MI:SS.US') FROM restore_drill" | head -n 1)"
+restored="$(run_sql shop-db-restored "SELECT to_char(max(at), 'YYYY-MM-DD HH24:MI:SS.US') FROM restore_drill" | marker_line)"
 if [ "$restored" = "$marker" ]; then pass "marker row is there ($restored)"; else fail "marker row missing: got '$restored'"; fi
 
 echo
