@@ -24,8 +24,28 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: aws-load-balancer-controller
+  # The chart makes a new CA and certificate every time it is rendered, so
+  # without these Argo CD sees the webhook certificate as drift on every
+  # comparison and keeps re-syncing it, backing off up to minutes between
+  # tries (the first session on the production profile waited 15 minutes).
+  # The Secret and the webhook configurations come from one render, so they
+  # match each other once applied.
+  ignoreDifferences:
+    - kind: Secret
+      name: aws-load-balancer-tls
+      jsonPointers: [/data]
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      name: aws-load-balancer-webhook
+      jqPathExpressions: [".webhooks[].clientConfig.caBundle"]
+    - group: admissionregistration.k8s.io
+      kind: ValidatingWebhookConfiguration
+      name: aws-load-balancer-webhook
+      jqPathExpressions: [".webhooks[].clientConfig.caBundle"]
   syncPolicy:
-    {{- toYaml $sync | nindent 4 }}
+    {{- $albSync := deepCopy $sync }}
+    {{- $_ := set $albSync "syncOptions" (append $sync.syncOptions "RespectIgnoreDifferences=true") }}
+    {{- toYaml $albSync | nindent 4 }}
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application

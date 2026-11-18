@@ -312,3 +312,10 @@ Copy this for each session:
   - A deletion of the leftover volume was refused by the permission check, correctly, since it had not been approved. It is left for the user to decide.
 - **AWS cost:** about two hours of the production profile at roughly $0.60 an hour, so around $1.2, plus a few minutes of the temporary RDS instance for the drill. That is an estimate from the hourly rate. Cost Explorer has the real number.
 
+
+## 2026-11-18 — Why the second session's wait took 15 minutes
+
+- **What I found:** the `aws-load-balancer-controller` Argo CD app was OutOfSync, off and on, from its first sync at 10:48 until 11:04:38. Self-heal re-applied the same three resources each time (the TLS Secret and the two webhook configurations), eight times, with the delay between tries growing to about five minutes. The load balancer controller pods themselves were Ready at 10:49:39.
+- **Likely cause:** the chart makes a new CA and certificate every time it is rendered. Rendering it twice with `helm template` gives different `tls.crt`, `tls.key`, `ca.crt` and nine `caBundle` values. Argo CD compares a fresh render with the cluster, so those fields can look like drift.
+- **Not proven:** a hard refresh on the running cluster did not make the app OutOfSync again, probably because Argo CD reuses a cached render. I did not reproduce the exact moment the render changed.
+- **Fix:** ignore the Secret's data and the webhooks' `caBundle`, and tell syncs to respect that. They come from one render, so they match each other once applied. Whether this removes the wait needs another session to confirm.
