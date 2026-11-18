@@ -78,7 +78,8 @@ jobs:
       - name: Apply the aws-platform settings
         run: make aws-environment
       - name: Wait for Argo CD
-        run: make wait-apps
+        # The first production-profile build used 15m17s of 15, and the job allows 40 in all.
+        run: make wait-apps WAIT_APPS_MINUTES=25
       - name: Summarize
         if: always()
         run: |
