@@ -4,7 +4,7 @@ The article is `building-an-idp-on-eks.md`. Work through this before posting.
 
 ## Decisions and facts to settle
 - **The repository is private.** The article links to it as the place to read the code. Make it public first, or change the two links and the sentence that says the code is there.
-- **The rebuild time in the article is not clean.** The 2026-11-18 session took about 37 minutes from dispatch to healthy, but 15 of them were the load balancer controller's certificate drift (fixed in PR #61, not yet confirmed on a fresh build). After the next session, replace the figure with the new time, and add it to the opening.
+- **The rebuild time in the article is not clean.** The 2026-11-18 first build took about 37 minutes from dispatch to healthy, but 15 of them were the load balancer controller's certificate drift. The ignore-rules fix (#61) broke the webhook on the next build and was reverted. Replace the figure once a certificate that is stable across renders is in, and add it to the opening.
 - **"Where it stands" reflects the 2026-11-18 session.** It lists what hasn't been tried: the dashboard and assistant, and a rebuild without the certificate delay. Update it after the next session.
 - **The Backstage fix is confirmed on EKS** (second session) and the article says so. Nothing to change unless the launcher changes.
 - **The assistant has not been run against the real model.** The last section says so. If you run `scripts/diagnose-eval.sh --compare` with a key before publishing, add the result (diagnosed N of 7 without and with runbooks, and the cost). That is the most interesting number the article could have.
