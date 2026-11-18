@@ -14,13 +14,14 @@ const github = {
 
 // Guest sign-in is only offered when running locally with `yarn start`.
 const providers =
-  process.env.NODE_ENV === 'development' ? (['guest', github] as const) : [github];
+  process.env.NODE_ENV === 'development'
+    ? (['guest', github] as const)
+    : [github];
 
 const signInPage = SignInPageBlueprint.make({
   params: {
-    loader: async () => props => (
-      <SignInPage {...props} providers={[...providers]} />
-    ),
+    loader: async () => props =>
+      <SignInPage {...props} providers={[...providers]} />,
   },
 });
 

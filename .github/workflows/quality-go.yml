@@ -1,0 +1,41 @@
+name: Quality (Go)
+
+# Checks one Go app: formatting, vet, tests with the race detector, and known
+# vulnerabilities in the standard library and the modules it uses. Called by CI
+# on every pull request and by the image workflows before they build.
+
+on:
+  workflow_call:
+    inputs:
+      dir:
+        description: The app's directory, e.g. apps/visits
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.dir }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: ${{ inputs.dir }}/go.mod
+          cache-dependency-path: ${{ inputs.dir }}/go.sum
+      - name: Formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          [ -z "$unformatted" ] || { echo "::error::Run gofmt on:"; echo "$unformatted"; exit 1; }
+      - name: Vet
+        run: go vet ./...
+      - name: Tests
+        run: go test -race -count=1 ./...
+      # Fails when code the app really calls is affected, so a Go release that
+      # fixes a standard library bug has to be taken before the next image.
+      - name: Known vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.10.0 ./...

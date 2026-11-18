@@ -7,10 +7,11 @@
 # Then open http://localhost:18080. Press Ctrl-C to delete the cluster.
 # Set ANTHROPIC_API_KEY to try the assistant too, which calls the Claude API.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 CLUSTER=idp-dashboard-demo
-export KUBECONFIG="$(mktemp)"
+KUBECONFIG="$(mktemp)"
+export KUBECONFIG
 cleanup() {
   [ -n "${PF_PID:-}" ] && { pkill -P "$PF_PID" 2> /dev/null; kill "$PF_PID" 2> /dev/null; }
   kind delete cluster --name "$CLUSTER" > /dev/null 2>&1

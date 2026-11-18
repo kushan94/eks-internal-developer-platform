@@ -25,10 +25,11 @@
 # Usage: scripts/diagnose-eval.sh [--evidence-only | --compare | --dry-run]
 # Set KEEP=1 to leave the cluster running.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 CLUSTER=idp-assistant-eval
-export KUBECONFIG="$(mktemp)"
+KUBECONFIG="$(mktemp)"
+export KUBECONFIG
 MODE="${1:-}"
 FAULTS=tests/diagnose/faults
 failures=0
@@ -110,8 +111,7 @@ start_forward() {
   (while true; do kubectl port-forward -n cluster-assistant svc/cluster-assistant 18080:8080 > /dev/null 2>&1; sleep 1; done) &
   PF_PID=$!
   disown "$PF_PID" 2> /dev/null
-  local i
-  for i in $(seq 1 60); do
+  for _ in $(seq 1 60); do
     curl -sf -m 2 localhost:18080/healthz > /dev/null 2>&1 && return 0
     sleep 1
   done

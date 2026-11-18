@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Tests marker_line with the shapes of output psql really gives.
 set -uo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")" || exit 1
 source ./drill-lib.sh
 failures=0
 check() { # description expected input

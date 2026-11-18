@@ -2,7 +2,7 @@
 # Tests delete-k8s-volumes.sh with a fake aws command, so nothing is touched.
 # The fake records every call and answers from canned output.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT

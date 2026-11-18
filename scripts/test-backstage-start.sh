@@ -3,7 +3,7 @@
 # backend. See gitops/root/files/backstage-start.js and tests/backstage-start/.
 # Needs Docker, Node 20 or later, and npm (for the pg module).
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 name="backstage-start-test-$$"
 trap 'docker rm -f "$name" > /dev/null 2>&1' EXIT

@@ -5,7 +5,7 @@
 # and the chart's own probes and replicas are unchanged.
 # Needs Docker and the internet (for the chart). Not run by make test for that reason.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 HELM="docker run --rm -v $PWD:/repo -w /repo ${HELM_IMAGE:-alpine/helm:latest}"
 YQ="docker run --rm -v $PWD:/repo -w /repo ${YQ_IMAGE:-mikefarah/yq:4.47.2}"
