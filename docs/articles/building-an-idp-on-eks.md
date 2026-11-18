@@ -168,17 +168,19 @@ I'd been building the platform for two weeks without noticing either. I noticed 
 
 I should be honest about the state of it. The tools are tested against deliberately broken workloads on kind, and the loop and the limits against a scripted model. The comparison of runbooks on against off runs against a stand-in for the API, which tests the harness and not the model. **I haven't yet run it against the real model, so I can't tell you how often it's right.** It also has no login yet, so it isn't deployed.
 
-## The first session on the production shape found four bugs
+## The production shape found four bugs, then a fifth problem
 
 The hardening work had only ever run on a local cluster. A single session on the production profile found four bugs that nothing local could have, and every one was in something I'd already called done.
 
-**Backstage never became ready.** The production shape runs two replicas, and the database is new every session. Both replicas ran the same migrations at once, and the race wrote one of knex's lock rows twice. With two rows, knex can never take its lock, so one plugin failed to start for good. Backstage's liveness endpoint kept answering 200, so nothing restarted the pods, and restarting wouldn't have helped. Earlier sessions ran the one-replica shape, so I'd never seen it. The fix makes each replica take a Postgres advisory lock before it starts and hold it until it's ready. It's tested against a real Postgres, and it hasn't met EKS yet.
+**Backstage never became ready.** The production shape runs two replicas, and the database is new every session. Both replicas ran the same migrations at once, and the race wrote one of knex's lock rows twice. With two rows, knex can never take its lock, so one plugin failed to start for good. Backstage's liveness endpoint kept answering 200, so nothing restarted the pods, and restarting wouldn't have helped. Earlier sessions ran the one-replica shape, so I'd never seen it. The fix makes each replica take a Postgres advisory lock before it starts and hold it until it's ready. It's tested against a real Postgres, and a second session confirmed it on EKS: the first replica was ready in 10 seconds, the second waited about 9 seconds for it and was ready 18 seconds later.
 
 **Both restore drills could never pass.** Newer `psql` prints a command tag for every statement, so each drill read `CREATE TABLE` or `INSERT 0 1` as its marker. The data was restored correctly every time, and the check was wrong.
 
 **Every promotion failed.** A leftover branch named `promote`, from the pull request mix-up, blocked every branch named `promote/...`, because Git can't hold both.
 
-**Each session left a volume behind.** Kubernetes keeps a StatefulSet's volume claims when it's deleted, so Loki's 5 GiB volume outlived every destroy. I only found it by counting what was left after the destroy. The destroy now sweeps these, though that step runs for the first time in the next real destroy.
+**Each session left a volume behind.** Kubernetes keeps a StatefulSet's volume claims when it's deleted, so Loki's 5 GiB volume outlived every destroy. I only found it by counting what was left after the destroy. The destroy now sweeps these, and it has run in real destroys: the nightly one deleted the leftover volume, and the next one found nothing left.
+
+A second session on the same shape turned up a fifth, smaller problem. The cluster went from nothing to healthy in about 37 minutes: 17 for Terraform, about 4 to install Argo CD and the platform settings, and 15 waiting for the apps, which finished with 19 seconds to spare. Nothing was broken. The load balancer controller's chart makes a new certificate every time it is rendered, so Argo CD kept seeing it as drift and re-syncing it, with longer and longer pauses between tries. It now ignores those fields, and I checked on the live cluster that changing them leaves the app in sync while a real change is still caught. I haven't yet seen a build without the delay.
 
 None of these were in the features. They were at the edges: first boot, a check's parsing, a stale branch, the order of a deletion. A platform you destroy every night crosses those edges every day, which is the point.
 
@@ -186,7 +188,7 @@ None of these were in the features. They were at the edges: first boot, a check'
 
 - **Two shapes, one switch.** A `profile` input picks between them. `study` is two zones, one NAT gateway and two nodes, at about $0.40 an hour. `production` is three zones with a NAT gateway and a node in each, Multi-AZ RDS, more replicas of the platform's components and backups, at roughly $0.60 an hour. Even production is destroyed every night.
 - **On EKS:** the architecture, both runtimes, databases, guardrails, metrics and alerts, and a deliberately broken service that fired in Slack after exactly five minutes. Then, in one session on the production shape, the hardening work: replicas spread across zones, network isolation enforced by the VPC CNI in both directions, a real promotion through a pull request, autoscaling reading live metrics, logs per environment, cost per service, and both restore drills. That session ran about two hours, roughly $1.2 at the profile's hourly rate.
-- **Not tried yet:** the dashboard and assistant aren't deployed, because they have no login and I haven't run them against the real model. The Backstage fix hasn't met EKS. And I still don't have a clean time from nothing to a healthy platform, because that session's cluster setup waited out its 15 minutes on the Backstage bug.
+- **Not tried yet:** the dashboard and assistant aren't deployed, because they have no login and I haven't run them against the real model. The clean rebuild time is about 37 minutes, but it includes the 15-minute wait above, so the next build should be shorter.
 - **Waiting on AWS:** GitHub OIDC for CI, which that organization policy blocks. What it denies is anything that creates another way to sign in to the account, which looks deliberate, so I've stopped expecting it to lift. Karpenter looked blocked too, but that was a false result, and I haven't tried it yet.
 - **Not done:** one AWS account is not a production setup, and a real platform would separate accounts under AWS Organizations.
 
