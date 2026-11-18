@@ -16,10 +16,10 @@ on:
         description: Dockerfile path
         type: string
         required: true
-      library-exit-code:
-        description: Exit code when a language dependency (npm, Go module) has a fixable finding. 0 only reports.
-        type: string
-        default: "1"
+      library-blocking:
+        description: Whether a fixable finding in a language dependency (npm, Go module) fails the scan. False only reports it.
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -66,4 +66,4 @@ jobs:
           pkg-types: library
           severity: HIGH,CRITICAL
           ignore-unfixed: true
-          exit-code: ${{ inputs.library-exit-code }}
+          exit-code: ${{ inputs.library-blocking && '1' || '0' }}

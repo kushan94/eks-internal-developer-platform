@@ -34,7 +34,7 @@ jobs:
       file: backstage/Dockerfile
       # Reported, not blocking yet: the JavaScript dependencies have fixable findings
       # (tar, undici and others) that need version bumps tested against Backstage.
-      library-exit-code: "0"
+      library-blocking: false
   build:
     needs: [code, scan]
     runs-on: ubuntu-latest

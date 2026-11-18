@@ -34,13 +34,18 @@ jobs:
         include:
           - { context: apps/visits, file: apps/visits/Dockerfile }
           - { context: apps/cluster-assistant, file: apps/cluster-assistant/Dockerfile }
-          # Backstage's JavaScript dependencies are reported but don't fail the scan yet.
-          - { context: backstage, file: backstage/Dockerfile, library_exit_code: "0" }
     uses: ./.github/workflows/quality-image.yml
     with:
       context: ${{ matrix.context }}
       file: ${{ matrix.file }}
-      library-exit-code: ${{ matrix.library_exit_code || '1' }}
+
+  # Backstage's JavaScript dependencies are reported but don't fail the scan yet.
+  image-backstage:
+    uses: ./.github/workflows/quality-image.yml
+    with:
+      context: backstage
+      file: backstage/Dockerfile
+      library-blocking: false
 
   repo:
     runs-on: ubuntu-latest
