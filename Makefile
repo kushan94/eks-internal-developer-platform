@@ -1,6 +1,7 @@
 CLUSTER ?= idp-local
 KUBE_CONTEXT ?= kind-$(CLUSTER)
 KUBECTL = kubectl --context $(KUBE_CONTEXT)
+WAIT_APPS_MINUTES ?= 15
 # Argo CD manages these after the first install; the versions live in gitops/root/values.yaml.
 ARGOCD_CHART_VERSION ?= $(shell awk '/^argocd:/ {f=1} f && /chartVersion:/ {print $$2; exit}' gitops/root/values.yaml)
 ESO_CHART_VERSION ?= $(shell awk '/^externalSecrets:/ {f=1} f && /chartVersion:/ {print $$2; exit}' gitops/root/values.yaml)
@@ -74,8 +75,8 @@ demo: ## Wait for Argo CD to deliver the example WebService
 	$(KUBECTL) -n demo wait webservice hello --for=condition=Ready --timeout=300s
 	$(KUBECTL) -n demo get webservice,deployment,service
 
-wait-apps: ## Wait until every Argo CD application is Synced and Healthy (up to 15 minutes)
-	@for i in $$(seq 1 90); do \
+wait-apps: ## Wait until every Argo CD application is Synced and Healthy (up to WAIT_APPS_MINUTES, 15 by default)
+	@for i in $$(seq 1 $$(( $(WAIT_APPS_MINUTES) * 6 ))); do \
 		apps=$$($(KUBECTL) -n argocd get applications -o jsonpath='{range .items[*]}{.metadata.name}={.status.sync.status}/{.status.health.status}{"\n"}{end}' 2>/dev/null); \
 		if [ -n "$$apps" ] && ! echo "$$apps" | grep -qv '=Synced/Healthy$$'; then echo "$$apps"; echo "All applications are Synced and Healthy."; exit 0; fi; \
 		sleep 10; \
