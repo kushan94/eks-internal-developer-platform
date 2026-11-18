@@ -56,5 +56,6 @@ jobs:
           curl -fsSLo crossplane https://releases.crossplane.io/stable/v2.5.0-rc.1/bin/linux_amd64/crossplane
           echo "ce9fb3421d53689dfae7fefc626ae2a58377ca056ee005bd4cfbe5a1c43785e7  crossplane" | sha256sum -c -
           sudo install crossplane /usr/local/bin/crossplane
+          crossplane config set features.enableBeta true
       - name: Platform tests
         run: make test
