@@ -1,6 +1,27 @@
 {{- if .Values.aws.enabled }}
-# The load balancer controller, ExternalDNS and the Gateway: only on EKS.
+# cert-manager, the load balancer controller, ExternalDNS and the Gateway: only on EKS.
 {{- $sync := dict "automated" (dict "prune" true "selfHeal" true) "syncOptions" (list "CreateNamespace=true" "ServerSideApply=true" "SkipDryRunOnMissingResource=true") "retry" (dict "limit" 20 "backoff" (dict "duration" "15s" "factor" 2 "maxDuration" "2m")) }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cert-manager
+  namespace: argocd
+spec:
+  project: platform
+  source:
+    repoURL: https://charts.jetstack.io
+    chart: cert-manager
+    targetRevision: v1.21.3
+    helm:
+      valuesObject:
+        crds:
+          enabled: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cert-manager
+  syncPolicy:
+    {{- toYaml $sync | nindent 4 }}
+---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -19,6 +40,10 @@ spec:
         # The VPC is recreated every session, so find it by its Name tag.
         vpcTags:
           Name: {{ .Values.clusterName }}
+        # The chart renders a new certificate on every Argo CD render, so the webhook's
+        # CA and its Secret drift apart. cert-manager issues one and keeps the
+        # webhook's caBundle in step with it.
+        enableCertManager: true
         serviceAccount:
           name: aws-load-balancer-controller
   destination:
