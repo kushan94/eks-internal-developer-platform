@@ -83,10 +83,11 @@ resource "aws_iam_role_policy" "crossplane" {
   })
 }
 
+# One service account for each AWS provider (see platform/crossplane/aws/runtime-config.yaml).
 resource "aws_eks_pod_identity_association" "crossplane" {
-  count           = var.enable_eks ? 1 : 0
+  for_each        = var.enable_eks ? toset(["ecs", "ec2", "cloudwatchlogs", "secretsmanager"]) : toset([])
   cluster_name    = module.eks[0].cluster_name
   namespace       = "crossplane-system"
-  service_account = "provider-aws"
+  service_account = "provider-aws-${each.key}"
   role_arn        = aws_iam_role.crossplane[0].arn
 }

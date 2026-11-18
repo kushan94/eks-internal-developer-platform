@@ -1,9 +1,39 @@
-# Gives every AWS provider the same service account, which EKS Pod Identity maps to an IAM role.
+# Each AWS provider gets its own service account, which EKS Pod Identity maps to
+# the IAM role. They must not share one: every provider revision claims its
+# service account as controller, so four revisions on one account rewrote it
+# about 40 times a second, all session long.
 apiVersion: pkg.crossplane.io/v1beta1
 kind: DeploymentRuntimeConfig
 metadata:
-  name: aws-pod-identity
+  name: aws-pod-identity-ecs
 spec:
   serviceAccountTemplate:
     metadata:
-      name: provider-aws
+      name: provider-aws-ecs
+---
+apiVersion: pkg.crossplane.io/v1beta1
+kind: DeploymentRuntimeConfig
+metadata:
+  name: aws-pod-identity-ec2
+spec:
+  serviceAccountTemplate:
+    metadata:
+      name: provider-aws-ec2
+---
+apiVersion: pkg.crossplane.io/v1beta1
+kind: DeploymentRuntimeConfig
+metadata:
+  name: aws-pod-identity-cloudwatchlogs
+spec:
+  serviceAccountTemplate:
+    metadata:
+      name: provider-aws-cloudwatchlogs
+---
+apiVersion: pkg.crossplane.io/v1beta1
+kind: DeploymentRuntimeConfig
+metadata:
+  name: aws-pod-identity-secretsmanager
+spec:
+  serviceAccountTemplate:
+    metadata:
+      name: provider-aws-secretsmanager
