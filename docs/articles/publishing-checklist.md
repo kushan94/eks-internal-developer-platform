@@ -4,9 +4,9 @@ The article is `building-an-idp-on-eks.md`. Work through this before posting.
 
 ## Decisions and facts to settle
 - **The repository is private.** The article links to it as the place to read the code. Make it public first, or change the two links and the sentence that says the code is there.
-- **No rebuild time is stated.** The 2026-11-17 production-shape session took 17 minutes for the infrastructure and 14 to destroy, but its cluster setup waited out its 15 minutes on the Backstage bug, so there is no clean "nothing to healthy" time. Once PR #59 (the Backstage fix) merges, the next session gives one. Add it to the opening.
-- **"Where it stands" reflects that session.** It says the hardening work ran on EKS, and lists what hasn't been tried: the dashboard and assistant, the Backstage fix on EKS, and a clean rebuild time. Update it after the next session.
-- **The article says the Backstage fix "hasn't met EKS yet"** (PR #59). Change that sentence after a production-profile session confirms it, or if the fix changes.
+- **The rebuild time in the article is not clean.** The 2026-11-18 session took about 37 minutes from dispatch to healthy, but 15 of them were the load balancer controller's certificate drift (fixed in PR #61, not yet confirmed on a fresh build). After the next session, replace the figure with the new time, and add it to the opening.
+- **"Where it stands" reflects the 2026-11-18 session.** It lists what hasn't been tried: the dashboard and assistant, and a rebuild without the certificate delay. Update it after the next session.
+- **The Backstage fix is confirmed on EKS** (second session) and the article says so. Nothing to change unless the launcher changes.
 - **The assistant has not been run against the real model.** The last section says so. If you run `scripts/diagnose-eval.sh --compare` with a key before publishing, add the result (diagnosed N of 7 without and with runbooks, and the cost). That is the most interesting number the article could have.
 
 ## Images
