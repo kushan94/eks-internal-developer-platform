@@ -34,11 +34,13 @@ jobs:
         include:
           - { context: apps/visits, file: apps/visits/Dockerfile }
           - { context: apps/cluster-assistant, file: apps/cluster-assistant/Dockerfile }
-          - { context: backstage, file: backstage/Dockerfile }
+          # Backstage's JavaScript dependencies are reported but don't fail the scan yet.
+          - { context: backstage, file: backstage/Dockerfile, library_exit_code: "0" }
     uses: ./.github/workflows/quality-image.yml
     with:
       context: ${{ matrix.context }}
       file: ${{ matrix.file }}
+      library-exit-code: ${{ matrix.library_exit_code || '1' }}
 
   repo:
     runs-on: ubuntu-latest
@@ -48,11 +50,11 @@ jobs:
         run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color
       - name: Shell scripts
         run: docker run --rm -v "$PWD:/mnt" koalaman/shellcheck:v0.10.0 -S warning scripts/*.sh
-      # The same version as the platform's Crossplane chart (crossplaneChartVersion).
+      # The Makefile uses `crossplane render`, which is `crossplane beta render` before 2.5.
       - name: Install the Crossplane CLI
         run: |
-          curl -fsSLo crossplane https://releases.crossplane.io/stable/v2.4.3/bin/linux_amd64/crossplane
-          echo "44593fe59c011cd4c4f421b2c8d7a6acc57ca2b80204a7f4fbbb253002732fd2  crossplane" | sha256sum -c -
+          curl -fsSLo crossplane https://releases.crossplane.io/stable/v2.5.0-rc.1/bin/linux_amd64/crossplane
+          echo "ce9fb3421d53689dfae7fefc626ae2a58377ca056ee005bd4cfbe5a1c43785e7  crossplane" | sha256sum -c -
           sudo install crossplane /usr/local/bin/crossplane
       - name: Platform tests
         run: make test

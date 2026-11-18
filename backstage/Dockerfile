@@ -20,6 +20,7 @@ FROM node:24-trixie-slim AS build
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && \
+    apt-get upgrade -y && \
     apt-get install -y --no-install-recommends libsqlite3-dev python3 g++ build-essential && \
     rm -rf /var/lib/apt/lists/*
 
