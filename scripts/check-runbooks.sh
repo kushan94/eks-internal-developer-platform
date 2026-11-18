@@ -4,7 +4,7 @@
 # It checks the concrete claims: spec fields, resource sizes, policy names,
 # and the messages the platform emits. It can't check advice.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 RUNBOOKS=apps/cluster-assistant/runbooks
 COMPOSITION=platform/crossplane/webservice/composition.yaml

@@ -4,7 +4,7 @@
 # makes the delete of one target group fail with ResourceInUse a set number
 # of times first, as AWS does just after a load balancer is deleted.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT

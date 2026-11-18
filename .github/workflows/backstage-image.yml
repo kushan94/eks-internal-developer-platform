@@ -23,7 +23,17 @@ env:
   REPOSITORY: idp/backstage
 
 jobs:
+  # Nothing is pushed unless the code passes its checks and the image has no
+  # fixable high or critical vulnerabilities.
+  code:
+    uses: ./.github/workflows/quality-backstage.yml
+  scan:
+    uses: ./.github/workflows/quality-image.yml
+    with:
+      context: backstage
+      file: backstage/Dockerfile
   build:
+    needs: [code, scan]
     runs-on: ubuntu-latest
     # Holds only the push-only ECR user's key.
     environment: aws-build

@@ -3,15 +3,19 @@
 # named "promote" (Git can't hold promote and promote/...), using the branch
 # line from the workflow itself and a real repository.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 failures=0
 check() { if [ "$2" = ok ]; then echo "  PASS  $1"; else echo "  FAIL  $1"; failures=$((failures + 1)); fi; }
 
 line="$(grep -E '^ *branch="promote' .github/workflows/promote.yml)"
 [ "$(printf "%s\n" "$line" | grep -c .)" = 1 ] || { echo "  FAIL  expected one branch= line in promote.yml"; exit 1; }
 
+# The workflow line reads these.
+# shellcheck disable=SC2034
 SERVICE=demo/visits TO=prod tag=0123456789abcdef
+# shellcheck disable=SC2154,SC1090 # branch comes from the eval
 eval "$line"
+# shellcheck disable=SC2154
 echo "Branch name: $branch"
 
 dir="$(mktemp -d)"

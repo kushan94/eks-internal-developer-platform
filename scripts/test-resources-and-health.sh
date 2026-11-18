@@ -7,10 +7,11 @@
 #
 # Usage: scripts/test-resources-and-health.sh        Set KEEP=1 to leave the cluster.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 CLUSTER=idp-health-test
-export KUBECONFIG="$(mktemp)"
+KUBECONFIG="$(mktemp)"
+export KUBECONFIG
 YQ="docker run --rm -v $PWD:/repo -w /repo ${YQ_IMAGE:-mikefarah/yq:4.47.2}"
 failures=0
 pass() { echo "  PASS  $*"; }
@@ -53,7 +54,7 @@ apply_rendered() { # file namespace
   $YQ 'select(.kind == "Deployment") | .metadata.namespace = "'"$2"'" | .spec.replicas = 1 | del(.metadata.ownerReferences)' "$1" | kubectl apply -f - > /dev/null
 }
 ready() { kubectl -n "$1" get pods -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}' 2> /dev/null; }
-wait_ready() { local i; for i in $(seq 1 "${2:-60}"); do [ "$(ready "$1")" = True ] && return 0; sleep 2; done; return 1; }
+wait_ready() { for _ in $(seq 1 "${2:-60}"); do [ "$(ready "$1")" = True ] && return 0; sleep 2; done; return 1; }
 
 # Nothing configured: a port check, so a running web server is ready.
 apply_rendered .test/kubernetes.yaml default-check
@@ -74,7 +75,7 @@ if [ "$(ready health-bad)" != True ]; then pass "a health check path that answer
 events="$(kubectl -n health-bad get events 2>&1)"
 grep -q "Startup probe failed: HTTP probe failed with statuscode: 404" <<< "$events" && pass "...and the event says why (statuscode 404)" || fail "no startup probe event naming the 404"
 echo "  (waiting for the startup window, about a minute, to see the restart)"
-for i in $(seq 1 50); do
+for _ in $(seq 1 50); do
   restarts="$(kubectl -n health-bad get pods -o jsonpath='{.items[0].status.containerStatuses[0].restartCount}' 2> /dev/null)"
   [ "${restarts:-0}" -ge 1 ] && break
   sleep 3
@@ -83,7 +84,7 @@ done
 
 echo "3. Resources on the pod"
 apply_rendered .test/resources.yaml sized
-for i in $(seq 1 30); do kubectl -n sized get pods -o name 2> /dev/null | grep -q pod && break; sleep 2; done
+for _ in $(seq 1 30); do kubectl -n sized get pods -o name 2> /dev/null | grep -q pod && break; sleep 2; done
 res="$(kubectl -n sized get pods -o jsonpath='{.items[0].spec.containers[0].resources}' 2> /dev/null)"
 for want in '"cpu":"250m"' '"memory":"512Mi"'; do grep -q "$want" <<< "$res" && pass "the pod has $want" || fail "the pod lacks $want: $res"; done
 grep -q '"limits":{"memory":"512Mi"}' <<< "$res" && pass "the limit is memory only, with no CPU limit" || fail "unexpected limits: $res"

@@ -27,7 +27,7 @@ YQ_IMAGE ?= mikefarah/yq:4.47.2
 PROMETHEUS_IMAGE ?= prom/prometheus:v3.7.3
 ALLOY_IMAGE ?= grafana/alloy:v1.21.3
 NODE_IMAGE ?= node:22-alpine
-GO_IMAGE ?= golang:1.27.3-alpine
+GO_IMAGE ?= golang:1.27.4-alpine
 TF_RUN = docker run --rm -v $(CURDIR)/infra/terraform:/workspace -w /workspace $(TF_IMAGE)
 
 .PHONY: local-up local-down cluster argocd argocd-backstage-token external-secrets platform-bootstrap wait-apps local-git gitops demo status backstage aws-environment test tf-validate tf-init bootstrap github-setup

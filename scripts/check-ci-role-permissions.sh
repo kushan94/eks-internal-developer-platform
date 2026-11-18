@@ -10,7 +10,7 @@
 # (for the state bucket and ECR repository names).
 # Usage: scripts/check-ci-role-permissions.sh
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 STATE=infra/bootstrap/terraform.tfstate
 failures=0

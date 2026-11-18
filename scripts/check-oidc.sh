@@ -16,7 +16,7 @@
 #
 # Usage: scripts/check-oidc.sh [--claims <run id>] [--terraform]
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 TF=infra/bootstrap/github-oidc.tf
 failures=0

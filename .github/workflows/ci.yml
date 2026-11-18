@@ -1,0 +1,52 @@
+name: CI
+
+# Runs on every pull request: the code checks for each app, a build and
+# vulnerability scan of each image, and the repository's own checks (workflow
+# and shell script lint, and the offline platform tests).
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go:
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: [apps/visits, apps/cluster-assistant]
+    uses: ./.github/workflows/quality-go.yml
+    with:
+      dir: ${{ matrix.dir }}
+
+  backstage:
+    uses: ./.github/workflows/quality-backstage.yml
+
+  images:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { context: apps/visits, file: apps/visits/Dockerfile }
+          - { context: apps/cluster-assistant, file: apps/cluster-assistant/Dockerfile }
+          - { context: backstage, file: backstage/Dockerfile }
+    uses: ./.github/workflows/quality-image.yml
+    with:
+      context: ${{ matrix.context }}
+      file: ${{ matrix.file }}
+
+  repo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Workflows
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color
+      - name: Shell scripts
+        run: docker run --rm -v "$PWD:/mnt" koalaman/shellcheck:v0.10.0 -S warning scripts/*.sh
+      - name: Platform tests
+        run: make test

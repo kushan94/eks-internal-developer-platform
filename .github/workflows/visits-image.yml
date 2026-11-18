@@ -28,7 +28,19 @@ env:
   IMAGE: ghcr.io/${{ github.repository_owner }}/idp-visits
 
 jobs:
+  # Nothing is pushed unless the code passes its checks and the image has no
+  # fixable high or critical vulnerabilities.
+  code:
+    uses: ./.github/workflows/quality-go.yml
+    with:
+      dir: apps/visits
+  scan:
+    uses: ./.github/workflows/quality-image.yml
+    with:
+      context: apps/visits
+      file: apps/visits/Dockerfile
   build:
+    needs: [code, scan]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
