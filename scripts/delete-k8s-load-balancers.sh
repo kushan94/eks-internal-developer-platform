@@ -34,9 +34,21 @@ if [ -n "$load_balancers" ]; then
   aws elbv2 wait load-balancers-deleted --load-balancer-arns $load_balancers
 fi
 
+# A target group still counts as in use for a few seconds after its load
+# balancer is gone, and one that is left blocks the next build by its name
+# (DuplicateTargetGroupName), so retry, and fail if one can't be deleted.
 for arn in $(tagged elasticloadbalancing:targetgroup); do
   echo "Deleting target group ${arn##*/targetgroup/}"
-  aws elbv2 delete-target-group --target-group-arn "$arn" || true
+  for attempt in $(seq 1 18); do
+    if error="$(aws elbv2 delete-target-group --target-group-arn "$arn" 2>&1)"; then break; fi
+    case "$error" in
+      *TargetGroupNotFound*) break ;;
+      *ResourceInUse*) ;;
+      *) echo "$error" >&2; exit 1 ;;
+    esac
+    [ "$attempt" = 18 ] && { echo "Could not delete target group ${arn##*/targetgroup/}: $error" >&2; exit 1; }
+    sleep 10
+  done
 done
 
 for arn in $(tagged ec2:security-group); do
