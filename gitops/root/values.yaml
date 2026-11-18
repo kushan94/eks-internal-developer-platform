@@ -35,4 +35,4 @@ highAvailability: false
 backstage:
   # Written by the Backstage image workflow after each build. Empty until the
   # first build, which keeps Backstage out of the cluster until there's an image.
-  imageTag: "52c8920b44cae7f89409bce4e054961f8d23c606"
+  imageTag: "aee3e773a72ddb8ba4afb52953315cc006b0afea"
