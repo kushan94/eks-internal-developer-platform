@@ -45,7 +45,6 @@ jobs:
     with:
       context: backstage
       file: backstage/Dockerfile
-      library-blocking: false
 
   repo:
     runs-on: ubuntu-latest
