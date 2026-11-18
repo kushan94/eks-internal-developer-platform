@@ -53,7 +53,8 @@ jobs:
           fi
 
           tag="${image##*:}"
-          branch="promote/${SERVICE//\//-}/$TO/${tag:0:12}"
+          # Not promote/..., because a branch named promote would block every one.
+          branch="promote-${SERVICE//\//-}-$TO-${tag:0:12}"
           sed -i -E "s|^  image: .*|  image: $image|" "$envs/$TO/webservice.yaml"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
