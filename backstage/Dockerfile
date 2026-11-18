@@ -50,6 +50,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get install -y --no-install-recommends libsqlite3-dev python3 g++ build-essential && \
     rm -rf /var/lib/apt/lists/*
 
+# The image installs with Yarn and starts with node, so npm is not used. Its
+# bundled packages (brace-expansion, undici) carry vulnerabilities the base image
+# has not fixed yet.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+
 USER node
 WORKDIR /app
 
