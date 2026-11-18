@@ -50,12 +50,12 @@ jobs:
         run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color
       - name: Shell scripts
         run: docker run --rm -v "$PWD:/mnt" koalaman/shellcheck:v0.10.0 -S warning scripts/*.sh
-      # The Makefile uses `crossplane render`, which is `crossplane beta render` before 2.5.
+      # The CLI is released apart from Crossplane itself. Same version as the one the
+      # tests were written with.
       - name: Install the Crossplane CLI
         run: |
-          curl -fsSLo crossplane https://releases.crossplane.io/stable/v2.5.0-rc.1/bin/linux_amd64/crossplane
-          echo "ce9fb3421d53689dfae7fefc626ae2a58377ca056ee005bd4cfbe5a1c43785e7  crossplane" | sha256sum -c -
+          curl -fsSLo crossplane https://cli.crossplane.io/stable/v2.5.0/bin/linux_amd64/crossplane
+          echo "065dd6b40c9ea5fc71e49900d5c924cc0bec7f58375922ddbde6b402f292347e  crossplane" | sha256sum -c -
           sudo install crossplane /usr/local/bin/crossplane
-          crossplane config set features.enableBeta true
       - name: Platform tests
         run: make test
