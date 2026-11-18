@@ -48,5 +48,11 @@ jobs:
         run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color
       - name: Shell scripts
         run: docker run --rm -v "$PWD:/mnt" koalaman/shellcheck:v0.10.0 -S warning scripts/*.sh
+      # The same version as the platform's Crossplane chart (crossplaneChartVersion).
+      - name: Install the Crossplane CLI
+        run: |
+          curl -fsSLo crossplane https://releases.crossplane.io/stable/v2.4.3/bin/linux_amd64/crossplane
+          echo "44593fe59c011cd4c4f421b2c8d7a6acc57ca2b80204a7f4fbbb253002732fd2  crossplane" | sha256sum -c -
+          sudo install crossplane /usr/local/bin/crossplane
       - name: Platform tests
         run: make test
