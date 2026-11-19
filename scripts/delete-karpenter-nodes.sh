@@ -34,8 +34,10 @@ if [ -n "$vpc" ] && [ "$vpc" != None ]; then
   fi
 fi
 
+# Karpenter tags its launch templates with the cluster's name (eks:eks-cluster-name)
+# and its node pool, not with karpenter.k8s.aws/cluster as its documentation suggests.
 for template in $(aws ec2 describe-launch-templates \
-  --filters "Name=tag:karpenter.k8s.aws/cluster,Values=$CLUSTER" \
+  --filters "Name=tag:eks:eks-cluster-name,Values=$CLUSTER" "Name=tag-key,Values=karpenter.sh/nodepool" \
   --query 'LaunchTemplates[].LaunchTemplateId' --output text); do
   echo "Deleting launch template $template"
   aws ec2 delete-launch-template --launch-template-id "$template" > /dev/null

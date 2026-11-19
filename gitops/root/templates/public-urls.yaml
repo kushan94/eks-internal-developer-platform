@@ -44,6 +44,15 @@ spec:
         # CA and its Secret drift apart. cert-manager issues one and keeps the
         # webhook's caBundle in step with it.
         enableCertManager: true
+        # The controller's webhook rejects every new Service while it isn't running,
+        # and it can't run until cert-manager has issued its certificate. That needs
+        # cert-manager's own Services, so without this exemption the two wait for
+        # each other whenever the webhook is registered first (seen 2026-11-19).
+        serviceMutatorWebhookConfig:
+          namespaceSelectors:
+            - key: kubernetes.io/metadata.name
+              operator: NotIn
+              values: [cert-manager]
         serviceAccount:
           name: aws-load-balancer-controller
   destination:
