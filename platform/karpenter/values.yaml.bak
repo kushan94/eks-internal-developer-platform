@@ -1,0 +1,8 @@
+# Set by gitops/root/templates/karpenter.yaml.
+clusterName: idp
+
+# The most Karpenter may launch in total. A cap on cost as much as on capacity:
+# 8 vCPU is four m7i.large nodes, about $0.40 an hour.
+xlimits:
+  cpu: "8"
+  memory: 32Gi

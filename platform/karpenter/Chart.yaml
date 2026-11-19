@@ -1,0 +1,4 @@
+apiVersion: v2
+name: karpenter-config
+description: The NodePool and EC2NodeClass that tell Karpenter what nodes it may launch
+version: 0.1.0

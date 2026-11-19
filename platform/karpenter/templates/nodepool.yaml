@@ -1,0 +1,42 @@
+# What Karpenter may launch, and when it takes nodes away again.
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: default
+spec:
+  template:
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: default
+      requirements:
+        # On-demand only: the organization's policy denies Spot launches.
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]
+        # The platform's images are built for amd64.
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        - key: karpenter.k8s.aws/instance-category
+          operator: In
+          values: ["c", "m", "r"]
+        - key: karpenter.k8s.aws/instance-generation
+          operator: Gt
+          values: ["5"]
+        # Nothing smaller than large: small nodes spend much of their memory on the
+        # system pods every node runs. Nothing so large that one node is a big loss.
+        - key: karpenter.k8s.aws/instance-size
+          operator: In
+          values: ["large", "xlarge", "2xlarge"]
+  limits:
+    cpu: {{ .Values.limits.cpu | quote }}
+    memory: {{ .Values.limits.memory }}
+  disruption:
+    # Move pods off a node that is empty or mostly idle and delete it.
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 2m

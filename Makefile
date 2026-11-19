@@ -229,6 +229,8 @@ test: ## Render the WebService composition for each runtime, database class, pro
 	@# behind (with a fake aws command), and how the restore drills read their marker.
 	scripts/test-delete-k8s-volumes.sh
 	scripts/test-delete-k8s-load-balancers.sh
+	scripts/test-delete-karpenter-nodes.sh
+	scripts/test-karpenter-config.sh
 	scripts/test-drill-lib.sh
 	@# The Promote workflow's branch name can't be blocked by a branch named promote.
 	scripts/test-promote-branch.sh
