@@ -46,6 +46,11 @@ module "eks" {
   endpoint_public_access       = true
   endpoint_public_access_cidrs = var.allowed_cidrs
 
+  # Karpenter finds the security group for the nodes it launches by this tag.
+  node_security_group_tags = {
+    "karpenter.sh/discovery" = var.cluster_name
+  }
+
   # Name the admins explicitly. Granting admin to whoever runs Terraform would
   # lock you out when the pipeline applies, and change access on every run.
   enable_cluster_creator_admin_permissions = false

@@ -234,7 +234,7 @@ colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
 - [ ] **8b. Traffic for ECS:** public URLs for the ECS runtime
 - [x] **9. Guardrails:** Pod Security Admission, Kyverno CEL policies and keyless image signing
 - [x] **10. Metrics:** metrics-server, Prometheus, Grafana with GitHub login, a dashboard per service linked from Backstage, and alerts to chat
-- [ ] **10b. Tracing, cost and scaling:** OpenCost cost per service and CPU autoscaling are built; OpenTelemetry, Karpenter and KEDA remain
+- [ ] **10b. Tracing, cost and scaling:** OpenCost cost per service and CPU autoscaling are built, and Karpenter is written ([ADR 0029](docs/adr/0029-karpenter-on-demand.md)) but not run on a cluster yet; OpenTelemetry and KEDA remain
 - [ ] **12. Production hardening:** availability profile, backups and restore drills, logs, network isolation, environments and promotion, self-managed Argo CD *(built and tested offline and on kind; EKS verification pending)*
 - [ ] **11. Article:** publish the write-up
 
@@ -299,7 +299,7 @@ The bootstrap stack's state stays in `infra/bootstrap/terraform.tfstate`. It hol
 ## EKS sessions
 `make tf-validate` runs Terraform in Docker and does not touch AWS. Creating real resources needs the AWS CLI, Terraform and AWS credentials, and it costs money.
 
-The account is in eu-north-1, and a member of an organization whose policy denies creating OIDC providers (and, as far as the policy simulator can tell, Spot requests), refuses other regions, and only allows Free Tier-eligible instance types, so this setup uses on-demand `m7i-flex.large` nodes and Pod Identity. Karpenter and EKS Auto Mode first looked blocked, but that was a false result, and they haven't been tried. See [ADR 0003](docs/adr/0003-local-first-ephemeral-eks.md).
+The account is in eu-north-1, and a member of an organization whose policy denies creating OIDC providers and launching Spot instances (a real Spot launch was refused on 2026-11-19), and refuses other regions, so this setup uses on-demand nodes and Pod Identity. It no longer restricts on-demand instance types to the Free Tier's. Karpenter first looked blocked, but that was a false result; it is written for on-demand nodes ([ADR 0029](docs/adr/0029-karpenter-on-demand.md)) and not yet run on a cluster, and EKS Auto Mode hasn't been tried. See [ADR 0003](docs/adr/0003-local-first-ephemeral-eks.md).
 
 Terraform always creates the VPC, a NAT gateway and the ECS cluster, which cost about $0.05 an hour. Setting `enable_eks=true` adds the EKS cluster, two on-demand nodes and the Pod Identity role for Crossplane, for about $0.38 an hour in total, including the VPC runner. A `$50` monthly budget alert, named `idp-monthly`, excludes credits.
 
@@ -368,6 +368,7 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0023: Argo CD manages itself and External Secrets after bootstrap](docs/adr/0023-self-managed-argocd.md)
 - [ADR 0024: Limit where services can connect](docs/adr/0024-egress-policies.md)
 - [ADR 0025: Cost per service with OpenCost](docs/adr/0025-cost-per-service.md)
+- [ADR 0029: Karpenter for node autoscaling, on-demand only](docs/adr/0029-karpenter-on-demand.md)
 
 ## License
 [MIT](LICENSE)

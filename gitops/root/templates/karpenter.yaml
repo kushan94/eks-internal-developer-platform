@@ -1,0 +1,59 @@
+{{- if .Values.aws.enabled }}
+# Karpenter adds nodes when pods can't be scheduled and removes them when they
+# aren't needed. See infra/terraform/karpenter.tf for its IAM and the reasons it
+# is on-demand only. EKS only: it needs the cluster's IAM and security groups.
+{{- $sync := dict "automated" (dict "prune" true "selfHeal" true) "syncOptions" (list "CreateNamespace=true" "ServerSideApply=true" "SkipDryRunOnMissingResource=true") "retry" (dict "limit" 20 "backoff" (dict "duration" "15s" "factor" 2 "maxDuration" "2m")) }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: karpenter
+  namespace: argocd
+spec:
+  project: platform
+  source:
+    # Karpenter publishes its chart only as an OCI image, so there is no
+    # oci:// prefix here, and a public registry needs no credentials in Argo CD.
+    repoURL: public.ecr.aws/karpenter
+    chart: karpenter
+    targetRevision: 1.15.1
+    helm:
+      valuesObject:
+        settings:
+          clusterName: {{ .Values.clusterName }}
+        serviceAccount:
+          # The Pod Identity association (infra/terraform/karpenter.tf) names this account.
+          name: karpenter
+        controller:
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 1Gi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    {{- toYaml $sync | nindent 4 }}
+---
+# The NodePool and EC2NodeClass. Separate, because they need the controller's CRDs.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: karpenter-config
+  namespace: argocd
+spec:
+  project: platform
+  source:
+    repoURL: {{ .Values.repoURL }}
+    targetRevision: {{ .Values.targetRevision }}
+    path: platform/karpenter
+    helm:
+      valuesObject:
+        clusterName: {{ .Values.clusterName }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    {{- toYaml $sync | nindent 4 }}
+{{- end }}

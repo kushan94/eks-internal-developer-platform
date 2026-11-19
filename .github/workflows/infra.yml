@@ -213,6 +213,11 @@ jobs:
             exit 1
           fi
       - run: terraform init -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" > /dev/null
+      # Karpenter launches nodes outside Terraform. Left behind, they block
+      # deleting the VPC, and the controller would keep launching more.
+      - name: Delete nodes created by Karpenter
+        working-directory: .
+        run: scripts/delete-karpenter-nodes.sh idp
       # The AWS Load Balancer Controller creates ALBs, target groups and security
       # groups outside Terraform. Left behind, they block deleting the VPC.
       - name: Delete load balancers created from Kubernetes

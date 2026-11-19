@@ -1,0 +1,26 @@
+# How Karpenter launches a node: where, with what image and which identity.
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: default
+spec:
+  # The instance profile is made by Terraform (infra/terraform/karpenter.tf), so
+  # Karpenter doesn't create IAM objects.
+  instanceProfile: {{ .Values.clusterName }}-karpenter-node
+  amiSelectorTerms:
+    # The latest EKS-optimized AL2023 image. Pin a version (al2023@vYYYYMMDD) to
+    # control when nodes pick up a new AMI.
+    - alias: al2023@latest
+  # Private subnets and the node security group, found by the tag Terraform sets.
+  subnetSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: {{ .Values.clusterName }}
+  securityGroupSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: {{ .Values.clusterName }}
+  kubelet:
+    # The VPC CNI runs with prefix delegation, like the node group's nodes, so
+    # a node can hold 110 pods. Karpenter would otherwise assume the lower limit.
+    maxPods: 110
+  tags:
+    purpose: karpenter
