@@ -1,6 +1,6 @@
 # ADR 0026: A cluster dashboard with a read-only AI assistant
 
-**Status:** Proposed (2026-11-14). The dashboard, the tools and their tests are built, and the dashboard was checked in a browser against a kind cluster. The model has not been run against the fault set yet, and nothing is deployed.
+**Status:** Proposed (2026-11-14). The dashboard, the tools and their tests are built, and the dashboard was checked in a browser against a kind cluster. The model has not been run against the fault set yet, and nothing is deployed. **Deferred (2026-11-19):** it stays in the repository as a feature to enable later; see "Enabling it later".
 
 ## Context
 When something is wrong with a cluster, an engineer first needs to see it: which nodes, namespaces and pods are unhealthy, how full the cluster is, and what Argo CD says. Then comes the slower part.
@@ -53,3 +53,11 @@ When a service breaks, an engineer reads pod status, events, logs, the objects a
 - **Metrics and logs history:** it can read the current and previous container logs, and ask Prometheus. Loki queries and Argo CD history aren't in yet.
 - **The upgrade advisor isn't built.** The dashboard shows version skew, but not EKS upgrade insights, deprecated API usage or add-on compatibility.
 - **No history of past diagnoses.** Each one is in the logs, but the page doesn't list them.
+
+## Enabling it later
+It was deferred on 2026-11-19 because the model can't be called from this account yet, and the dashboard alone, with no login, isn't worth running on EKS. Nothing in the platform depends on it, and it is not deployed.
+
+- **Model access, tested 2026-11-19 from eu-north-1:** every Claude model on Bedrock there is reachable only through an inference profile. Haiku 4.5 and Sonnet 4.6 (EU and global profiles) failed with "Model use case details have not been submitted for this account", which means filling in Anthropic's one-time use-case form in the Bedrock console; I did not submit it. Haiku 5.5, Sonnet 5.5 and Opus 5 failed with "not available for this account", which looks like an account-level restriction (the error points to AWS Sales); I don't know whether it can be lifted. No call succeeded, so I haven't seen whether the EU profile's routing to other regions clears the organization policy.
+- **The other route is the Anthropic API,** with a key from the Anthropic Console (a Claude subscription doesn't include one; it needs prepaid credits). The code reads `ANTHROPIC_API_KEY` today.
+- **If Bedrock is used,** the Go SDK has a Bedrock mode (check its documentation before writing the change), the model IDs and the price table in `cost.go` change, the call authenticates with a Pod Identity role instead of a key, and `scripts/diagnose-eval.sh --compare` should be rerun, because the model would not be the one the runbooks were written against.
+- **Before it goes on EKS** it still needs a login in front of it (oauth2-proxy with GitHub, as for Grafana), a NetworkPolicy, and the key or the role. Those are in the consequences above.
