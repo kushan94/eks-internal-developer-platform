@@ -1,6 +1,6 @@
 # ADR 0029: Karpenter for node autoscaling, on-demand only
 
-**Status:** Proposed (2026-11-19). Written and tested offline. It has not run on a cluster yet.
+**Status:** Accepted (2026-11-19). Verified on a production-profile cluster: scale up, scale down and the destroy sweep all worked. Two problems found on the way are fixed (see Consequences).
 
 ## Context
 The node group has a fixed size: two nodes, or three zones' worth on the production profile, and it only grows when someone changes Terraform. [ADR 0022](0022-autoscaling.md) scales pods with demand, but pods beyond what fits stay Pending. A node autoscaler closes that gap, and also removes nodes that are empty or mostly idle.
@@ -27,4 +27,7 @@ Karpenter was thought to be blocked by the account's organization policy. That w
 ## Consequences
 - **Spot is out,** so the savings Karpenter is known for (Spot nodes) are unavailable. What remains is fitting nodes to pods, and removing idle nodes.
 - **The nodes it launches use `al2023@latest`,** so a node launched later may have a newer image than one launched earlier. Pin a version to control when that happens.
-- **Not verified on a cluster:** that the node joins (the access entry and the security group tag), that `maxPods: 110` agrees with the VPC CNI, that Argo CD pulls the OCI chart without a registry, and that consolidation removes the node. The first session tests each.
+- **Verified on a cluster (2026-11-19):** the OCI chart pulled with no registry entry in Argo CD; the controller, EC2NodeClass and NodePool went Ready. Three pods requesting 1 vCPU each, with no room on the three nodes, made Karpenter launch three `c7i-flex.large` on-demand nodes: launched in 2 to 3 seconds, registered in about 15 and initialized in about 30 from creation. After the pods were deleted, the nodes were consolidated away about 3 minutes later and the instances terminated. A destroy with a Karpenter node still running terminated it and finished (122 resources) with nothing left blocking the VPC.
+- **It picks `-flex` types.** For 1 vCPU pods it chose `c7i-flex.large`, the cheapest that fits. The account allows them.
+- **Two things went wrong around it, both fixed.** (1) cert-manager and the load balancer controller deadlocked (the controller's Service webhook rejected cert-manager's own Service, and the controller can't run without cert-manager's certificate); the cert-manager namespace is now exempt from that webhook, and a fresh build then needed no repair. (2) The destroy sweep looked for launch templates by a tag from Karpenter's documentation that Karpenter doesn't set; it uses `eks:eks-cluster-name` and `karpenter.sh/nodepool` now. Karpenter deletes its launch templates itself within minutes, so the sweep rarely finds one; I confirmed the tags once, from a live template, and not the sweep's launch template step against a live one.
+- **Not tested:** how Karpenter behaves under a real workload (disruption of pods with local state, node expiry), and with the node group at its minimum under the study profile.
