@@ -29,5 +29,9 @@ grep -q 'node_iam_role_name *= "${var.cluster_name}-karpenter-node"' infra/terra
 grep -q 'iam_role_name *= "${var.cluster_name}-karpenter-controller"' infra/terraform/karpenter.tf && grep -q 'controller_role="$CLUSTER-karpenter-controller"' scripts/delete-karpenter-nodes.sh && pass "the destroy script finds the controller role" || fail "controller role name differs between Terraform and the destroy script"
 grep -q 'service_account *= "karpenter"' infra/terraform/karpenter.tf && grep -q 'name: karpenter$' gitops/root/templates/karpenter.yaml && pass "the service account matches the Pod Identity association" || fail "service account differs between Terraform and the Application"
 
+echo "no deadlock between cert-manager and the load balancer controller"
+alb="$(awk '/name: aws-load-balancer-controller/,/syncPolicy/' gitops/root/templates/public-urls.yaml)"
+grep -q 'serviceMutatorWebhookConfig' <<< "$alb" && grep -q 'values: \[cert-manager\]' <<< "$alb" && pass "the Service webhook skips the cert-manager namespace" || fail "the load balancer controller's Service webhook can block cert-manager's Services"
+
 echo
 [ "$failures" = 0 ] && echo "The Karpenter configuration is consistent." || { echo "$failures check(s) failed."; exit 1; }

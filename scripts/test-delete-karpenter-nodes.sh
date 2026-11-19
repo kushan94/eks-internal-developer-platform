@@ -27,7 +27,8 @@ case "$1 $2" in
       *vpc-id,Values=vpc-123*tag-key,Values=karpenter.sh/nodepool*) echo "i-karp1 i-karp2" ;;
     esac ;;
   "ec2 describe-launch-templates")
-    case "$*" in *tag:karpenter.k8s.aws/cluster,Values=idp*) echo "lt-abc" ;; esac ;;
+    # Both tags, as Karpenter really sets them: the cluster's name and its node pool.
+    case "$*" in *tag:eks:eks-cluster-name,Values=idp*tag-key,Values=karpenter.sh/nodepool*) echo "lt-abc" ;; esac ;;
 esac
 FAKE
 chmod +x "$work/bin/aws" "$work/bin/sleep"
