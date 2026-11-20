@@ -105,8 +105,10 @@ Backstage's Web Service template creates services with environments by default (
 ## Public URLs
 On EKS, add `public: true` to a Kubernetes-runtime WebService to serve it at `https://<name>-<namespace>.idp.example.com`. Its URL appears in `kubectl get webservice` and in `status.url`. One shared ALB, created from a Gateway API Gateway, serves every public service, and ExternalDNS publishes the hostnames. See [ADR 0009](docs/adr/0009-public-urls.md).
 
+The domain is not committed: files carry `idp.example.com` as a placeholder, and your own domain is supplied from outside the repository. Copy `infra/bootstrap/terraform.tfvars.example` to `terraform.tfvars` (Git ignores it) and set `parent_domain` and `platform_domain` (and `platform_domain` in `infra/terraform/terraform.tfvars`). `make github-setup` stores it as the `IDP_DOMAIN` repository variable, which the workflows pass to Terraform and to `make gitops DOMAIN=...`. Create the GitHub App with `PLATFORM_DOMAIN=<your domain> scripts/github-app.py backstage`. `scripts/test-domain.sh` checks that nothing in Git names a real domain and that the patches Argo CD applies replace every placeholder. Links in `catalog/` and in the Backstage template's skeleton keep the placeholder, so edit them for your own domain.
+
 One-time DNS setup:
-1. **Create the zones:** run `make bootstrap`. It creates Route 53 zones for `example.com` and `idp.example.com`, the delegation between them, and the wildcard certificate.
+1. **Create the zones:** run `make bootstrap`. It creates Route 53 zones for your `parent_domain` and `platform_domain` (`example.com` and `idp.example.com` here), the delegation between them, and the wildcard certificate.
 2. **Get the nameservers:** run `terraform -chdir=infra/bootstrap output parent_domain_nameservers`.
 3. **Point the domain at Route 53:** at the registrar, set the domain's nameservers to those four. ACM validates the certificate once they resolve.
 
