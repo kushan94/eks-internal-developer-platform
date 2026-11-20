@@ -52,5 +52,5 @@ spec:
           title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}{{ with .CommonLabels.service }} · {{ . }}{{ end }}'
           text: |-
             {{ range .Alerts }}{{ if .Annotations.summary }}{{ .Annotations.summary }}{{ else }}{{ .Annotations.description }}{{ end }}
-            {{ with .Annotations.dashboard }}Dashboard: {{ . }}
+            {{ with .Annotations.dashboard }}Dashboard: https://grafana.idp.example.com{{ . }}
             {{ end }}{{ end }}

@@ -103,6 +103,18 @@ spec:
     repoURL: {{ .Values.repoURL }}
     targetRevision: {{ .Values.targetRevision }}
     path: platform/gateway
+    # The listeners' hostnames in Git are placeholders. scripts/test-domain.sh
+    # checks that these patches replace every one of them.
+    kustomize:
+      patches:
+        - target: {kind: Gateway, name: platform}
+          patch: |-
+            - op: replace
+              path: /spec/listeners/0/hostname
+              value: "*.{{ .Values.domain }}"
+            - op: replace
+              path: /spec/listeners/1/hostname
+              value: "*.{{ .Values.domain }}"
   destination:
     server: https://kubernetes.default.svc
     namespace: gateway-system

@@ -23,14 +23,14 @@ metadata:
   links:
 {%- if values.public and values.environments %}
 {%- for env in ['prod', 'staging', 'dev'] %}
-    - url: https://${{ values.name }}-${{ values.namespace }}-${{ env }}.idp.skyforgelab.cloud
+    - url: https://${{ values.name }}-${{ values.namespace }}-${{ env }}.idp.example.com
       title: Open ${{ env }}
 {%- endfor %}
 {%- elif values.public %}
-    - url: https://${{ values.name }}-${{ values.namespace }}.idp.skyforgelab.cloud
+    - url: https://${{ values.name }}-${{ values.namespace }}.idp.example.com
       title: Open the app
 {%- endif %}
-    - url: https://grafana.idp.skyforgelab.cloud/d/webservice/webservice?var-service=${{ values.namespace }}-${{ values.name }}
+    - url: https://grafana.idp.example.com/d/webservice/webservice?var-service=${{ values.namespace }}-${{ values.name }}
       title: Dashboard
       icon: dashboard
 spec:

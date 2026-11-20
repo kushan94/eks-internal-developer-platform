@@ -45,7 +45,7 @@ spec:
     - name: http
       protocol: HTTP
       port: 80
-      hostname: "*.idp.skyforgelab.cloud"
+      hostname: "*.idp.example.com"
       allowedRoutes:
         namespaces:
           from: Same
@@ -54,7 +54,7 @@ spec:
     - name: https
       protocol: HTTPS
       port: 443
-      hostname: "*.idp.skyforgelab.cloud"
+      hostname: "*.idp.example.com"
       allowedRoutes:
         namespaces:
           from: All

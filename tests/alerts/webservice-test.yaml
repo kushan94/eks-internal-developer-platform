@@ -41,7 +41,7 @@ tests:
               service: shop
             exp_annotations:
               summary: "shop in demo has no ready pods."
-              dashboard: "https://grafana.idp.skyforgelab.cloud/d/webservice/webservice?var-service=shop&var-environment=$__all"
+              dashboard: "/d/webservice/webservice?var-service=shop&var-environment=$__all"
 
   # shop's container restarts every 3 minutes; blog's restarted once.
   - interval: 1m
@@ -64,7 +64,7 @@ tests:
               service: shop
             exp_annotations:
               summary: "shop in demo restarted 5 times in 15 minutes."
-              dashboard: "https://grafana.idp.skyforgelab.cloud/d/webservice/webservice?var-service=shop&var-environment=$__all"
+              dashboard: "/d/webservice/webservice?var-service=shop&var-environment=$__all"
 
   # visits runs in dev and prod; only prod's pod is down, and the alert says which environment.
   - interval: 1m
@@ -92,7 +92,7 @@ tests:
               environment: prod
             exp_annotations:
               summary: "demo-visits in demo-prod has no ready pods."
-              dashboard: "https://grafana.idp.skyforgelab.cloud/d/webservice/webservice?var-service=demo-visits&var-environment=prod"
+              dashboard: "/d/webservice/webservice?var-service=demo-visits&var-environment=prod"
 
   # Cost: visits in prod (app + database on n1) and dev (app on n2). A platform
   # pod without a service label isn't counted.

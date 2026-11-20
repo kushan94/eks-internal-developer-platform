@@ -13,7 +13,7 @@ Developers can create services, but can't see how they behave: CPU, memory, rest
   - It picks up `PodMonitor`s and `ServiceMonitor`s from every namespace.
 - **Service metrics:** `spec.metrics` on a `WebService` (`path`, and `port` if it differs from the service port) makes the composition add a named container port and a `PodMonitor`. Kubernetes runtime only.
 - **One dashboard for every service:** the `WebService` dashboard shows running pods, restarts, memory, scrape health, and CPU, memory and network by pod. It finds a service's pods by their `backstage.io/kubernetes-id` label, which kube-state-metrics exports, so it also covers the service's in-cluster database and needs no per-service setup.
-- **Grafana on EKS:** at `grafana.idp.skyforgelab.cloud` through the shared Gateway, with GitHub login only.
+- **Grafana on EKS:** at `grafana.idp.example.com` through the shared Gateway, with GitHub login only.
   - The login form is off. A JMESPath rule makes the users listed in `grafanaAdmins` admins, and `role_attribute_strict` refuses everyone else.
   - The OAuth app's credentials live in Secrets Manager and reach Grafana through External Secrets.
 - **Backstage:** every service links to its dashboard, including services created from the template.

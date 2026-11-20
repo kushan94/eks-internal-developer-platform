@@ -36,7 +36,7 @@ metadata:
   title: Backstage
   description: The developer portal
   links:
-    - url: https://backstage.idp.skyforgelab.cloud
+    - url: https://backstage.idp.example.com
       title: Backstage
   annotations:
     github.com/project-slug: kushan94/eks-internal-developer-platform
@@ -95,7 +95,7 @@ metadata:
   annotations:
     github.com/project-slug: kushan94/eks-internal-developer-platform
   links:
-    - url: https://grafana.idp.skyforgelab.cloud
+    - url: https://grafana.idp.example.com
       title: Open Grafana
       icon: dashboard
 spec:

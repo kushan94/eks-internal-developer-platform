@@ -1,0 +1,3 @@
+# Copy to terraform.tfvars, which Git ignores, and set your own domain.
+parent_domain   = "example.com"     # The domain you registered. Set this zone's nameservers at the registrar.
+platform_domain = "idp.example.com" # Where the platform's public URLs live.

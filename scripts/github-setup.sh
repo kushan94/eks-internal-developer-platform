@@ -16,6 +16,12 @@ if [ -z "${CLUSTER_ADMIN_ARNS:-}" ]; then
 fi
 out() { terraform -chdir=infra/bootstrap output -raw "$1"; }
 
+# The platform's domain isn't committed. The workflows read it from this
+# repository variable: IDP_DOMAIN, or platform_domain in the bootstrap tfvars.
+IDP_DOMAIN="${IDP_DOMAIN:-$(awk -F'"' '/^platform_domain/ {print $2}' infra/bootstrap/terraform.tfvars 2>/dev/null)}"
+[ -n "$IDP_DOMAIN" ] || { echo "Set IDP_DOMAIN, or platform_domain in infra/bootstrap/terraform.tfvars." >&2; exit 1; }
+gh variable set IDP_DOMAIN --repo "$REPO" --body "$IDP_DOMAIN"
+
 # Plans run for pull requests, so this environment has no branch restriction.
 gh api -X PUT "repos/$REPO/environments/aws-plan" --silent
 

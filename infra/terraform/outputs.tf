@@ -28,6 +28,9 @@ output "aws_platform_environment" {
         }
         # Makes in-cluster databases run three instances across AZs.
         highAvailability = local.high_availability
+        # The public domain, kept out of Git. Overrides the placeholder in the
+        # platform EnvironmentConfig.
+        publicDomain = var.platform_domain
       },
       # The shared Postgres server for managed databases, which comes with EKS.
       var.enable_eks ? {

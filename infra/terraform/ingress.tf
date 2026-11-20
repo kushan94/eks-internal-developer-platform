@@ -4,7 +4,11 @@
 variable "platform_domain" {
   description = "Route 53 zone for public service URLs, created by the bootstrap stack."
   type        = string
-  default     = "idp.skyforgelab.cloud"
+
+  validation {
+    condition     = length(var.platform_domain) > 0
+    error_message = "Set platform_domain (TF_VAR_platform_domain, or terraform.tfvars). The workflows read it from the IDP_DOMAIN repository variable."
+  }
 }
 
 data "aws_route53_zone" "platform" {

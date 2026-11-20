@@ -6,7 +6,8 @@ metadata:
   name: platform
 data:
   platform:
-    domain: idp.skyforgelab.cloud
+    # A placeholder: the aws-platform EnvironmentConfig's publicDomain overrides it.
+    domain: idp.example.com
     gateway:
       name: platform
       namespace: gateway-system

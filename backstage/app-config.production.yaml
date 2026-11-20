@@ -1,18 +1,19 @@
 # Production settings, used in the cluster together with app-config.yaml.
 # Values in ${...} come from environment variables, which the Helm release
-# fills from Kubernetes secrets created by External Secrets.
+# fills from Kubernetes secrets created by External Secrets, and from the root
+# application's domain (BACKSTAGE_BASE_URL).
 
 app:
-  baseUrl: https://backstage.idp.skyforgelab.cloud
+  baseUrl: ${BACKSTAGE_BASE_URL}
 
 backend:
-  baseUrl: https://backstage.idp.skyforgelab.cloud
+  baseUrl: ${BACKSTAGE_BASE_URL}
   # An object, not ':7007': the Helm chart sets APP_CONFIG_backend_listen_port,
   # and Backstage can't merge that into a string.
   listen:
     port: 7007
   cors:
-    origin: https://backstage.idp.skyforgelab.cloud
+    origin: ${BACKSTAGE_BASE_URL}
   database:
     client: pg
     connection:

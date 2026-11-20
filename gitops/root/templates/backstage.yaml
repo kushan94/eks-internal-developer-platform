@@ -37,6 +37,10 @@ spec:
             - name: launcher
               mountPath: /launcher
               readOnly: true
+          # The public URL comes from the root application's domain, so it isn't in the image.
+          extraEnvVars:
+            - name: BACKSTAGE_BASE_URL
+              value: https://backstage.{{ .Values.domain }}
           # backstage-argocd is created by `make argocd-backstage-token`.
           extraEnvVarsSecrets: [backstage-github-app, backstage-database, backstage-argocd]
           resources:

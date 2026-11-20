@@ -96,7 +96,7 @@ Copy this for each session:
 - **Lesson:** "delegate a subdomain" means NS records *inside the parent zone*, not changing the domain's nameservers. Writing the delegation as a Terraform resource makes the relationship explicit.
 
 ### 2026-11-06: First public URL
-- **What happened:** `https://hello-demo.idp.skyforgelab.cloud` answered HTTP 200 from the internet.
+- **What happened:** `https://hello-demo.idp.example.com` answered HTTP 200 from the internet.
   - The certificate was found in ACM by hostname.
   - ExternalDNS created the records.
   - HTTP redirects to HTTPS with a 301, and unknown hosts get a 404.

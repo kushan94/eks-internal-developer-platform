@@ -19,7 +19,8 @@ githubOwner: kushan94
 # Public URLs, used when aws.enabled is true.
 clusterName: idp
 region: eu-north-1
-domain: idp.skyforgelab.cloud
+# A placeholder. `make gitops` passes the real domain, so it stays out of Git.
+domain: idp.example.com
 
 # GitHub users who can sign in to Grafana on EKS, as admins.
 grafanaAdmins:
