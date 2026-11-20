@@ -20,7 +20,7 @@ for ha in true false; do
   d=.test/backstage-chart/$ha
   mkdir -p $d
   $HELM template root gitops/root --set aws.enabled=true --set awsAccountId=000000000000 --set backstage.imageTag=test \
-    --set highAvailability=$ha --show-only templates/backstage.yaml > $d/application.yaml 2> $d/error.txt || { fail "couldn't render the root chart: $(head -3 $d/error.txt)"; continue; }
+    --set highAvailability=$ha --set domain=idp.test.example --show-only templates/backstage.yaml > $d/application.yaml 2> $d/error.txt || { fail "couldn't render the root chart: $(head -3 $d/error.txt)"; continue; }
   repo="$($YQ '.spec.source.repoURL' $d/application.yaml)" chart="$($YQ '.spec.source.chart' $d/application.yaml)" version="$($YQ '.spec.source.targetRevision' $d/application.yaml)"
   $YQ '.spec.source.helm.valuesObject' $d/application.yaml > $d/values.yaml
   $HELM template backstage "$chart" --repo "$repo" --version "$version" -f $d/values.yaml > $d/rendered.yaml 2> $d/error.txt || { fail "couldn't render the $chart chart $version: $(head -3 $d/error.txt)"; continue; }
@@ -39,7 +39,9 @@ for ha in true false; do
   # every document and can pass by luck (see the note in the Makefile).
   check "the launcher is mounted at /launcher, read-only" '([.spec.template.spec.containers[0].volumeMounts[] | select(.name == "launcher" and .mountPath == "/launcher" and .readOnly == true)] | length) == 1'
   check "...from the ConfigMap backstage-start" '.spec.template.spec.volumes[] | select(.name == "launcher") | .configMap.name == "backstage-start"'
-  check "the launcher can find the pg module" '.spec.template.spec.containers[0].env[] | select(.name == "NODE_PATH") | .value == "/app/node_modules"'
+  # Counts, because a variable that is missing selects nothing, and a comparison on nothing passes.
+  check "the launcher can find the pg module" '([.spec.template.spec.containers[0].env[] | select(.name == "NODE_PATH" and .value == "/app/node_modules")] | length) == 1'
+  check "Backstage gets its public URL from the domain" '([.spec.template.spec.containers[0].env[] | select(.name == "BACKSTAGE_BASE_URL" and .value == "https://backstage.idp.test.example")] | length) == 1'
   check "the database secret is still passed" '([.spec.template.spec.containers[0].envFrom[].secretRef | select(.name == "backstage-database")] | length) == 1'
   check "the GitHub App secret is still passed" '([.spec.template.spec.containers[0].envFrom[].secretRef | select(.name == "backstage-github-app")] | length) == 1'
   check "the chart's readiness probe is still the real one" '.spec.template.spec.containers[0].readinessProbe.httpGet.path == "/.backstage/health/v1/readiness"'
