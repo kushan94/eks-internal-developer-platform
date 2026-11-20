@@ -42,7 +42,8 @@ build() { # name, directory: the directory built with the Application's patches
   rm -rf "$out" && mkdir -p "$out" && cp -R "$dir"/. "$out"/
   yq "select(.kind == \"Application\" and .metadata.name == \"$name\") | .spec.source.kustomize.patches" <<< "$rendered" > "$out/patches.yaml"
   [ -s "$out/patches.yaml" ] && [ "$(cat "$out/patches.yaml")" != null ] || { fail "$name has no kustomize patches"; return 1; }
-  yq -i ".patches = load(\"$out/patches.yaml\")" "$out/kustomization.yaml"
+  # No -i: the yq container can't write files the runner owns.
+  yq ".patches = load(\"$out/patches.yaml\")" < "$out/kustomization.yaml" > "$out/kustomization.new" && mv "$out/kustomization.new" "$out/kustomization.yaml"
   kubectl kustomize "$out" > "$out/built.yaml" 2> "$out/err" || { fail "$name doesn't build: $(cat "$out/err")"; return 1; }
 }
 
