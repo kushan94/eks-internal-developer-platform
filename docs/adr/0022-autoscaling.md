@@ -3,7 +3,7 @@
 **Status:** Accepted (2026-11-13)
 
 ## Context
-Every service ran a fixed number of replicas: too many when idle, too few under load. Production platforms scale services with demand. Node autoscaling with Karpenter is written but not run on a cluster yet ([ADR 0029](0029-karpenter-on-demand.md)); it was thought to be blocked by the account's organization policy, which turned out to be a false result (see the update in [ADR 0003](0003-local-first-ephemeral-eks.md)), but pod autoscaling only needs metrics-server, which every cluster already runs.
+Every service ran a fixed number of replicas: too many when idle, too few under load. Production platforms scale services with demand. Node autoscaling with Karpenter is set up and verified ([ADR 0029](0029-karpenter-on-demand.md)); it was thought to be blocked by the account's organization policy, which turned out to be a false result (see the update in [ADR 0003](0003-local-first-ephemeral-eks.md)), but pod autoscaling only needs metrics-server, which every cluster already runs.
 
 ## Decision
 - **An optional `spec.autoscaling` on `WebService`:** `minReplicas`, `maxReplicas` (up to 50) and `targetCPUUtilization` (default 70%, of each pod's CPU request). The XRD refuses `maxReplicas` below `minReplicas` with a CEL rule.
