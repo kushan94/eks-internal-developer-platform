@@ -210,4 +210,4 @@ What carries over to any platform is the shape: one small API, Git as the only w
 
 ---
 
-*All the code, two dozen decision records, and notes on everything that broke: [github.com/kushan94/eks-internal-developer-platform](https://github.com/kushan94/eks-internal-developer-platform).*
+*All the code, 28 decision records, and notes on everything that broke: [github.com/kushan94/eks-internal-developer-platform](https://github.com/kushan94/eks-internal-developer-platform).*

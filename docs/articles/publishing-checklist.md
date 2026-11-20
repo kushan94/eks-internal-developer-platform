@@ -4,6 +4,7 @@ The article is `building-an-idp-on-eks.md`. Work through this before posting.
 
 ## Decisions and facts to settle
 - **The repository is private.** The article links to it as the place to read the code. Make it public first, or change the two links and the sentence that says the code is there.
+  A gitleaks scan of the full history (2026-11-20) found one hit: a sample JWT in a redaction test, not a secret.
 - **The rebuild time is in the article, from two runs:** 34 minutes (2026-11-18) and 31 (2026-11-19, with Karpenter and the cert-manager deadlock fix), both from the start of the apply to a healthy platform with no repair by hand. If the opening still quotes the earlier 37-minute figure, replace it. Two runs say little about variance.
 - **"Where it stands" and the new Karpenter section reflect 2026-11-19.** They say the dashboard and assistant were left out on purpose, and that Karpenter is on-demand only because Spot is denied. Check the Karpenter figures against ADR 0029 if you edit them.
 - **The Backstage fix is confirmed on EKS** (second session) and the article says so. Nothing to change unless the launcher changes.
