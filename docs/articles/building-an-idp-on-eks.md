@@ -42,6 +42,8 @@ Developers don't write the file by hand. A Backstage form writes it and opens a 
 
 ## The shape
 
+![The platform: a pull request from Backstage, Argo CD, Crossplane, and the AWS resources it creates](images/eks-idp-architecture-light.png)
+
 1. **Backstage** opens a pull request as a GitHub App.
 2. **Argo CD** watches the repo and creates a namespace and an application for each team folder, or each environment of a service.
 3. **Crossplane** owns the `WebService` API. One composition, written with Go templates, turns each one into the resources for its runtime and options.

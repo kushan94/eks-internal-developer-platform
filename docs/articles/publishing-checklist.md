@@ -11,7 +11,7 @@ The article is `building-an-idp-on-eks.md`. Work through this before posting.
 - **The assistant is deferred (2026-11-19) and has not been run against the real model.** The last section says so, and should say it is a feature kept for later, with why (see ADR 0026, "Enabling it later"). Bedrock isn't usable from this account yet. If you run `scripts/diagnose-eval.sh --compare` with a key before publishing, add the result (diagnosed N of 7 without and with runbooks, and the cost). That is the most interesting number the article could have.
 
 ## Images
-- **A diagram of the shape.** The article uses a numbered list, because Medium doesn't render ASCII diagrams. A simple SVG of Backstage, GitHub, Argo CD, Crossplane and the resources it creates would help.
+- **The diagram of the shape** is `images/eks-idp-architecture-light.png` (editable source `architecture.drawio`, dark version alongside), placed under "The shape". Upload it to Medium by hand; Medium can't take a relative path.
 - **Screenshots** are in `docs/articles/images/` on the `cluster-assistant` branch (PR #52): the dashboard overview, the events tab and the assistant's answer. They come from a demo cluster, so they contain no account IDs. Check any others before using them.
 - The Backstage template form and a Slack alert would suit the opening sections.
 
