@@ -13,13 +13,13 @@ metadata:
     # Matches the pods of every environment, in demo-dev, demo-staging and demo-prod.
     backstage.io/kubernetes-id: demo-visits
   links:
-    - url: https://visits-demo-prod.idp.skyforgelab.cloud
+    - url: https://visits-demo-prod.idp.example.com
       title: Open prod
-    - url: https://visits-demo-staging.idp.skyforgelab.cloud
+    - url: https://visits-demo-staging.idp.example.com
       title: Open staging
-    - url: https://visits-demo-dev.idp.skyforgelab.cloud
+    - url: https://visits-demo-dev.idp.example.com
       title: Open dev
-    - url: https://grafana.idp.skyforgelab.cloud/d/webservice/webservice?var-service=demo-visits
+    - url: https://grafana.idp.example.com/d/webservice/webservice?var-service=demo-visits
       title: Dashboard
       icon: dashboard
 spec:

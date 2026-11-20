@@ -332,6 +332,23 @@ spec:
     repoURL: {{ .Values.repoURL }}
     targetRevision: {{ .Values.targetRevision }}
     path: platform/observability/aws
+    # The hostname and the Slack message's Grafana address in Git are
+    # placeholders. scripts/test-domain.sh checks these patches against them.
+    kustomize:
+      patches:
+        - target: {kind: HTTPRoute, name: grafana}
+          patch: |-
+            - op: replace
+              path: /spec/hostnames/0
+              value: grafana.{{ .Values.domain }}
+        - target: {kind: AlertmanagerConfig, name: chat}
+          patch: |-
+            - op: replace
+              path: /spec/receivers/0/slackConfigs/0/text
+              value: |-
+                {{ `{{ range .Alerts }}{{ if .Annotations.summary }}{{ .Annotations.summary }}{{ else }}{{ .Annotations.description }}{{ end }}
+                {{ with .Annotations.dashboard }}Dashboard: https://grafana.` }}{{ .Values.domain }}{{ `{{ . }}
+                {{ end }}{{ end }}` }}
   destination:
     server: https://kubernetes.default.svc
     namespace: monitoring

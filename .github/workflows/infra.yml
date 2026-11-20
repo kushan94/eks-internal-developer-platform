@@ -73,6 +73,7 @@ jobs:
       TF_VAR_region: eu-north-1
       TF_VAR_allowed_cidrs: '["${{ secrets.ALLOWED_CIDR }}"]'
       TF_VAR_cluster_admin_arns: ${{ secrets.CLUSTER_ADMIN_ARNS }}
+      TF_VAR_platform_domain: ${{ vars.IDP_DOMAIN }}
       TF_VAR_enable_eks: ${{ inputs.enable_eks || false }}
       TF_VAR_profile: ${{ inputs.profile || 'study' }}
     steps:
@@ -131,6 +132,7 @@ jobs:
       TF_VAR_region: eu-north-1
       TF_VAR_allowed_cidrs: '["${{ secrets.ALLOWED_CIDR }}"]'
       TF_VAR_cluster_admin_arns: ${{ secrets.CLUSTER_ADMIN_ARNS }}
+      TF_VAR_platform_domain: ${{ vars.IDP_DOMAIN }}
       TF_VAR_enable_eks: ${{ inputs.enable_eks }}
       TF_VAR_profile: ${{ inputs.profile }}
     steps:
@@ -182,6 +184,7 @@ jobs:
       TF_VAR_region: eu-north-1
       TF_VAR_allowed_cidrs: '["${{ secrets.ALLOWED_CIDR }}"]'
       TF_VAR_cluster_admin_arns: ${{ secrets.CLUSTER_ADMIN_ARNS }}
+      TF_VAR_platform_domain: ${{ vars.IDP_DOMAIN }}
       # Destroy everything in the state, whichever parts exist.
       TF_VAR_enable_eks: "true"
     steps:
@@ -226,7 +229,7 @@ jobs:
       # Records ExternalDNS created would otherwise point at the deleted load balancer.
       - name: Delete DNS records created from Kubernetes
         working-directory: .
-        run: scripts/delete-external-dns-records.sh idp.skyforgelab.cloud idp
+        run: scripts/delete-external-dns-records.sh "${{ vars.IDP_DOMAIN }}" idp
       # Database passwords Crossplane copied to Secrets Manager for ECS services.
       - name: Delete secrets created from Kubernetes
         working-directory: .

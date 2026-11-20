@@ -58,7 +58,7 @@ PROFILES = {
         # Commit statuses: read lets Backstage resolve a branch's latest commit
         # when it reads catalog files with a glob, such as catalog/**/*.yaml.
         "permissions": {"contents": "write", "pull_requests": "write", "statuses": "read", "metadata": "read"},
-        "callback_urls": ["https://backstage.idp.skyforgelab.cloud/api/auth/github/handler/frame"],
+        "callback_urls": ["https://backstage.{domain}/api/auth/github/handler/frame"],
         "oauth": True,
         "file_stem": "github-backstage-app",
         "secret_id": "idp/backstage/github-app",
@@ -113,7 +113,11 @@ def create(owner, repo_url):
         "default_permissions": PROFILE["permissions"],
     }
     if PROFILE.get("callback_urls"):
-        manifest["callback_urls"] = PROFILE["callback_urls"]
+        # The platform's domain isn't committed. Set it for the Backstage app.
+        domain = os.environ.get("PLATFORM_DOMAIN")
+        if not domain:
+            sys.exit("Set PLATFORM_DOMAIN to the platform's domain, for example idp.example.com.")
+        manifest["callback_urls"] = [url.format(domain=domain) for url in PROFILE["callback_urls"]]
         manifest["request_oauth_on_install"] = False
     form = f"""<!doctype html><html><body>
 <form id="f" method="post" action="https://github.com/settings/apps/new?state={state}">

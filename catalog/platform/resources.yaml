@@ -53,7 +53,7 @@ kind: Resource
 metadata:
   name: idp-gateway
   title: Public gateway
-  description: Shared ALB that serves every public URL under idp.skyforgelab.cloud
+  description: Shared ALB that serves every public URL under idp.example.com
 spec:
   type: load-balancer
   owner: group:default/platform-team
@@ -67,7 +67,7 @@ kind: Resource
 metadata:
   name: idp-dns
   title: Platform DNS
-  description: Route 53 zones for skyforgelab.cloud and idp.skyforgelab.cloud, with the wildcard certificate
+  description: Route 53 zones for example.com and idp.example.com, with the wildcard certificate
 spec:
   type: dns-zone
   owner: group:default/platform-team

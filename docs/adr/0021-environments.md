@@ -31,6 +31,6 @@ Each service ran once, and a new image went straight to the only copy. Productio
 
 ## Consequences
 - **Each environment uses its own resources:** visits now runs 4 pods and 3 databases instead of 2 pods and 1.
-- **Public URLs include the environment,** for example `visits-demo-prod.idp.skyforgelab.cloud`.
+- **Public URLs include the environment,** for example `visits-demo-prod.idp.example.com`.
 - **Namespace-level isolation is weaker than separate clusters.** A cluster-wide failure, or a mistake in a cluster-scoped resource, affects every environment at once.
 - **A team directory holding only services with environments still gets an empty `workload-<team>` app and namespace,** from the original ApplicationSet. That's harmless, and could be avoided by moving such teams to a separate folder.

@@ -102,7 +102,7 @@ spec:
           title: Public URL
           type: boolean
           default: false
-          description: Serve the service at https://<name>-<namespace>.idp.skyforgelab.cloud. Kubernetes runtime only, for now.
+          description: Serve the service at https://<name>-<namespace>.idp.example.com. Kubernetes runtime only, for now.
         database:
           title: Database
           type: string

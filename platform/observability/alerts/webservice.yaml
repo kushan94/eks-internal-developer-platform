@@ -29,7 +29,7 @@ spec:
             severity: warning
           annotations:
             summary: '{{ $labels.service }} in {{ $labels.namespace }} restarted {{ printf "%.0f" $value }} times in 15 minutes.'
-            dashboard: "https://grafana.idp.skyforgelab.cloud/d/webservice/webservice?var-service={{ $labels.service }}&var-environment={{ or $labels.environment \"$__all\" }}"
+            dashboard: "/d/webservice/webservice?var-service={{ $labels.service }}&var-environment={{ or $labels.environment \"$__all\" }}"
         # None of a service's own pods are ready. Only pods owned by a
         # ReplicaSet count, so a ready database pod doesn't hide a dead app.
         - alert: WebServiceDown
@@ -50,7 +50,7 @@ spec:
             severity: critical
           annotations:
             summary: "{{ $labels.service }} in {{ $labels.namespace }} has no ready pods."
-            dashboard: "https://grafana.idp.skyforgelab.cloud/d/webservice/webservice?var-service={{ $labels.service }}&var-environment={{ or $labels.environment \"$__all\" }}"
+            dashboard: "/d/webservice/webservice?var-service={{ $labels.service }}&var-environment={{ or $labels.environment \"$__all\" }}"
     # What each service costs, from OpenCost: the CPU and memory its containers
     # are allocated, at their node's hourly prices. It includes the service's
     # in-cluster database. Shared parts, such as the control plane, the

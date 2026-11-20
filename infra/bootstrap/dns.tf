@@ -6,13 +6,11 @@
 variable "parent_domain" {
   description = "Domain registered at the registrar, whose nameservers point at this zone."
   type        = string
-  default     = "skyforgelab.cloud"
 }
 
 variable "platform_domain" {
   description = "Subdomain that Route 53 hosts for the platform."
   type        = string
-  default     = "idp.skyforgelab.cloud"
 }
 
 resource "aws_route53_zone" "parent" {

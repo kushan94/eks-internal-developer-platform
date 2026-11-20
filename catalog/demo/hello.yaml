@@ -11,7 +11,7 @@ metadata:
     backstage.io/kubernetes-id: demo-hello
     backstage.io/kubernetes-namespace: demo
   links:
-    - url: https://grafana.idp.skyforgelab.cloud/d/webservice/webservice?var-service=demo-hello
+    - url: https://grafana.idp.example.com/d/webservice/webservice?var-service=demo-hello
       title: Dashboard
       icon: dashboard
 spec:

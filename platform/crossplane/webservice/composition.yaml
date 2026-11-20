@@ -397,9 +397,11 @@ spec:
             {{- end }}
             {{- if $xr.spec.public }}
             {{- $platform := dig "platform" dict $env }}
-            {{- if not (and $platform.domain $platform.gateway) }}{{ fail "public WebServices need platform.domain and platform.gateway in the platform EnvironmentConfig" }}{{ end }}
+            {{- /* The real domain comes from the aws-platform EnvironmentConfig, which is generated and not committed. */}}
+            {{- $domain := or (dig "publicDomain" "" $env) $platform.domain }}
+            {{- if not (and $domain $platform.gateway) }}{{ fail "public WebServices need a domain (publicDomain in aws-platform, or platform.domain) and platform.gateway in the platform EnvironmentConfig" }}{{ end }}
             {{- /* One label under the domain, so the wildcard certificate covers it. */}}
-            {{- $host := printf "%s-%s.%s" $name $ns $platform.domain }}
+            {{- $host := printf "%s-%s.%s" $name $ns $domain }}
             ---
             apiVersion: gateway.networking.k8s.io/v1
             kind: HTTPRoute

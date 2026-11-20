@@ -1,0 +1,6 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Argo CD patches in the real domain (see the Application in gitops/root/templates),
+# so it stays out of Git. The hostnames below are placeholders.
+resources:
+  - gateway.yaml

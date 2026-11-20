@@ -1,4 +1,4 @@
-# EKS only: Grafana at grafana.idp.skyforgelab.cloud through the shared
+# EKS only: Grafana at grafana.<domain> through the shared
 # Gateway, with GitHub login. The GitHub OAuth app's credentials live in
 # Secrets Manager (idp/grafana/github-oauth) and are never committed.
 apiVersion: external-secrets.io/v1
@@ -34,7 +34,7 @@ spec:
       namespace: gateway-system
       sectionName: https
   hostnames:
-    - grafana.idp.skyforgelab.cloud
+    - grafana.idp.example.com
   rules:
     - matches:
         - path:
