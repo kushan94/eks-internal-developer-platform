@@ -7,6 +7,9 @@ name: App deploy
 #     deploy:
 #       permissions: { contents: write, id-token: write }
 #       uses: kushan94/eks-internal-developer-platform/.github/workflows/app-deploy.yml@main
+#       secrets:
+#         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 #
 # It lints and scans the image, pushes it to the platform's ECR registry as
 # idp-apps/<repo>:<commit>, signs it, and records the tag in the app repo's
@@ -14,8 +17,11 @@ name: App deploy
 # names the image as idp-apps/<repo>:<commit>, without the registry address,
 # because that holds the AWS account ID. The WebService composition adds it.
 #
-# The calling repo needs an aws-build environment, limited to main, holding that
-# repo's push-only key: scripts/app-repo-setup.sh in this repo creates it.
+# The calling repo holds that repo's push-only ECR key as two repository secrets
+# (scripts/app-repo-setup.sh in this repo sets them). Environment secrets don't
+# reach a called workflow, so they can't be limited to main. The key can only
+# push to that repo's own registry, and an image there only runs if this
+# workflow signed it, which it only does for the default branch.
 #
 # The signature carries this workflow's identity, not the app repo's. That is
 # what the cluster's signed-images policy checks, so an image only gets in by
@@ -23,6 +29,12 @@ name: App deploy
 
 on:
   workflow_call:
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        description: The push-only key for this repo's registry
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
     inputs:
       context:
         description: Build context in the app repo
@@ -58,9 +70,6 @@ jobs:
     permissions:
       contents: write
       id-token: write
-    # The caller's environment, which holds only this repo's push-only ECR key
-    # and which only its default branch can use.
-    environment: aws-build
     env:
       AWS_REGION: eu-north-1
     steps:

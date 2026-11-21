@@ -20,7 +20,7 @@ The deploy file names the image as `idp-apps/<repo>:<commit>`, without the regis
 
 To onboard a repo:
 1. Add `apps/<repo>.yaml` here and merge it.
-2. Run `make bootstrap`, which creates the repo's ECR repository and a push-only key for it, then `scripts/app-repo-setup.sh <repo>`, which stores that key in the repo's `aws-build` environment, limited to main. The repo must be public, because GitHub can't limit an environment to a branch in a private repo on the free plan.
+2. Run `make bootstrap`, which creates the repo's ECR repository and a push-only key for it, then `scripts/app-repo-setup.sh <repo>`, which stores that key as two repository secrets. (Environment secrets would let only main use it, but they don't reach a called workflow.)
 3. Put this in the app repo as `.github/workflows/deploy.yml`:
 
 ```yaml
@@ -33,6 +33,9 @@ jobs:
   deploy:
     permissions: { contents: write, id-token: write }
     uses: kushan94/eks-internal-developer-platform/.github/workflows/app-deploy.yml@main
+    secrets:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 ```
 
 It builds `Dockerfile` at the repo root and edits `deploy/web.yaml`, which must have exactly one `  image:` line. The `context`, `file` and `deploy-file` inputs change those. It only runs from the repo's default branch. See [ADR 0030](../docs/adr/0030-app-repos.md).
