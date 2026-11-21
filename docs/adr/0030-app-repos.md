@@ -36,9 +36,9 @@ Follow-ups, in order:
 
 ### Moving to ECR (2026-11-22: decided to do it now, with stored keys)
 The article is stronger with an AWS-native registry, so this is being done before OIDC (PR #37). With the OIDC provider blocked, each app repo holds its own push-only key, until OIDC replaces the keys with a role. The steps:
-1. **Registries and keys (done in the bootstrap stack):** `infra/bootstrap/apps.tf` creates `idp-apps/<repo>` (immutable tags, scan on push, last 10 images kept) and a user that can push only to it, for every file in `apps/`. Registries outlive the nightly destroy. `scripts/app-repo-setup.sh <repo>` stores the key in the app repo's `aws-build` environment, which only main can use.
+1. **Registries and keys (done in the bootstrap stack):** `infra/bootstrap/apps.tf` creates `idp-apps/<repo>` (immutable tags, scan on push, last 10 images kept) and a user that can push only to it, for every file in `apps/`. Registries outlive the nightly destroy. `scripts/app-repo-setup.sh <repo>` stores the key as two repository secrets in the app repo.
 2. **The workflow, composition and policies (built, not yet run on a cluster):**
-   - `app-deploy.yml` logs in to ECR with the repo's key from its `aws-build` environment, pushes `<registry>/idp-apps/<repo>:<commit>` and signs it.
+   - `app-deploy.yml` logs in to ECR with the repo's key, passed by the caller as secrets, pushes `<registry>/idp-apps/<repo>:<commit>` and signs it.
    - The deploy file names the image `idp-apps/<repo>:<commit>`. The WebService composition adds the registry address from `ecrRegistry` in the `aws-platform` EnvironmentConfig, so the account ID stays out of the public app repo. It fails with a clear message where there is no registry, such as on kind.
    - `allowed-registries` accepts `<12 digits>.dkr.ecr.eu-north-1.amazonaws.com/idp-apps/...` in any account, because the account ID is kept out of Git. `verify-platform-images` also matches those images and requires the platform workflow's signature, which is the real gate.
    - Kyverno's admission controller reads signatures from private ECR with a Pod Identity role limited to `idp-apps/*` (`infra/terraform/kyverno.tf`) and `credentials.providers: [amazon]`.
@@ -50,3 +50,6 @@ Things to get right:
 - Tags are immutable, so a rerun of the same commit can't push again.
 - ECR repositories need creating per app, and the nightly destroy must leave their images alone.
 - Both registries have to be allowed during the move, because the Backstage and visits images stay where they are.
+
+### What the first ECR run showed (2026-11-22)
+The first design stored the key in an `aws-build` environment limited to main, and the reusable workflow named that environment. The build failed at the AWS login with no credentials: environment secrets are not passed into a called workflow, even when its job names the environment. So the key is now a pair of repository secrets that the caller passes explicitly. That drops the branch limit on the key (and the need for the repo to be public). It is acceptable because the key can only push to that repo's own immutable-tag registry, and the cluster only runs an image there if the platform workflow signed it, which the workflow does only for the default branch. A person with write access to an app repo can push junk images, not deploy one.
