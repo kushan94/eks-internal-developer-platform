@@ -1,7 +1,8 @@
-# The platform's own images (ghcr.io/kushan94/...) must be signed by one of
-# this repo's GitHub Actions workflows on main. Signing is keyless: the
-# workflow's GitHub identity is recorded in Sigstore's public transparency
-# log, so there are no signing keys to store or rotate.
+# The platform's own images (ghcr.io/kushan94/... and the private ECR
+# repositories idp-apps/...) must be signed by one of this repo's GitHub Actions
+# workflows on main, which includes app-deploy.yml when an app repo calls it.
+# Signing is keyless: the workflow's GitHub identity is recorded in Sigstore's
+# public transparency log, so there are no signing keys to store or rotate.
 apiVersion: policies.kyverno.io/v1
 kind: ImageValidatingPolicy
 metadata:
@@ -24,6 +25,11 @@ spec:
       controllers: [deployments]
   matchImageReferences:
     - glob: ghcr.io/kushan94/*
+    - glob: '*.dkr.ecr.eu-north-1.amazonaws.com/idp-apps/*'
+  # Reads signatures from private ECR with the admission controller's Pod
+  # Identity role (infra/terraform/kyverno.tf).
+  credentials:
+    providers: [amazon]
   validationConfigurations:
     # Tags stay as written, so Crossplane and Argo CD don't see drift.
     mutateDigest: false
@@ -40,8 +46,8 @@ spec:
           url: https://rekor.sigstore.dev
   validations:
     - expression: >-
-        images.containers.filter(i, i.startsWith('ghcr.io/kushan94/'))
+        images.containers.filter(i, i.startsWith('ghcr.io/kushan94/') || i.contains('.dkr.ecr.eu-north-1.amazonaws.com/idp-apps/'))
           .all(i, verifyImageSignatures(i, [attestors.platformCI]) > 0)
       message: >-
-        ghcr.io/kushan94 images must be signed by a GitHub Actions workflow in
+        ghcr.io/kushan94 and idp-apps/ ECR images must be signed by a GitHub Actions workflow in
         kushan94/eks-internal-developer-platform on main

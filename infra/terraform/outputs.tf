@@ -31,6 +31,8 @@ output "aws_platform_environment" {
         # The public domain, kept out of Git. Overrides the placeholder in the
         # platform EnvironmentConfig.
         publicDomain = var.platform_domain
+        # Where images under idp-apps/ live. Holds the account ID, so it stays out of Git.
+        ecrRegistry = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.region}.amazonaws.com"
       },
       # The shared Postgres server for managed databases, which comes with EKS.
       var.enable_eks ? {

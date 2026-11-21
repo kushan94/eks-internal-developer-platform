@@ -144,6 +144,12 @@ test: ## Render the WebService composition for each runtime, database class, pro
 	$(CROSSPLANE) render tests/render/xr-resources-ecs.yaml \
 		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml \
 		--extra-resources platform/crossplane/aws/environment.example.yaml 2>&1 | grep -q "resources and healthCheck are only available for the kubernetes runtime"
+	@# An image under idp-apps/ gets the registry address from the environment, and fails without one.
+	$(CROSSPLANE) render --include-full-xr tests/render/xr-app-image.yaml \
+		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml \
+		--extra-resources platform/crossplane/aws/environment.example.yaml > .test/app-image.yaml
+	$(CROSSPLANE) render tests/render/xr-app-image.yaml \
+		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml 2>&1 | grep -q "images under idp-apps/ need ecrRegistry"
 	$(CROSSPLANE) render --include-full-xr tests/render/xr-allow-from.yaml \
 		platform/crossplane/webservice/composition.yaml platform/crossplane/webservice/functions.yaml > .test/allow-from.yaml
 	! $(CROSSPLANE) render tests/render/xr-allow-from-ecs.yaml \
@@ -206,6 +212,9 @@ test: ## Render the WebService composition for each runtime, database class, pro
 	@# Plain numbers, which YAML reads as integers, work too, and come out as quantities.
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Deployment") | (.spec.template.spec.containers[0].resources | ((.requests.cpu == "1") and (.requests.memory == "1073741824") and (.limits.memory == "1073741824")))' .test/resources-numbers.yaml
 	@# Health: a port check by default, which is ready without restarting anything; with a path, all three HTTP probes.
+	@# The expanded image reaches the pod, and an ordinary image is left alone.
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Deployment") | (.spec.template.spec.containers[0].image == "111122223333.dkr.ecr.eu-west-1.amazonaws.com/idp-apps/orders:0123456789abcdef")' .test/app-image.yaml
+	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Deployment") | (.spec.template.spec.containers[0].image == "nginxinc/nginx-unprivileged:1.29-alpine")' .test/kubernetes.yaml
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Deployment") | (.spec.template.spec.containers[0] | ((.readinessProbe.tcpSocket.port == "http") and (has("livenessProbe") | not) and (has("startupProbe") | not)))' .test/kubernetes.yaml
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) -e 'select(.kind == "Deployment") | (.spec.template.spec.containers[0] | ((.readinessProbe.httpGet.path == "/healthz") and (.livenessProbe.httpGet.path == "/healthz") and (.startupProbe.httpGet.path == "/healthz") and (.readinessProbe | has("tcpSocket") | not)))' .test/health-check.yaml
 	@# With autoscaling, the HorizontalPodAutoscaler owns the replica count.

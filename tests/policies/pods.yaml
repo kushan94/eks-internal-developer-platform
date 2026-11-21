@@ -53,3 +53,47 @@ spec:
   containers:
     - name: app
       image: nginxinc/nginx-unprivileged:1.29-alpine
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: good-ecr
+  namespace: team-a
+spec:
+  containers:
+    - name: app
+      image: 111122223333.dkr.ecr.eu-north-1.amazonaws.com/idp-apps/orders:0123456789ab
+      resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {memory: 256Mi}}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-ecr-other-repo
+  namespace: team-a
+spec:
+  containers:
+    - name: app
+      image: 111122223333.dkr.ecr.eu-north-1.amazonaws.com/other/orders:0123456789ab
+      resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {memory: 256Mi}}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-ecr-other-region
+  namespace: team-a
+spec:
+  containers:
+    - name: app
+      image: 111122223333.dkr.ecr.eu-west-1.amazonaws.com/idp-apps/orders:0123456789ab
+      resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {memory: 256Mi}}
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: bad-ecr-lookalike
+  namespace: team-a
+spec:
+  containers:
+    - name: app
+      image: 111122223333.dkr.ecr.eu-north-1.amazonaws.com.evil.example/idp-apps/orders:0123456789ab
+      resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {memory: 256Mi}}
