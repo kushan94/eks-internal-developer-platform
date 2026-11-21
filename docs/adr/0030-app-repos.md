@@ -1,6 +1,6 @@
 # ADR 0030: Deploying from application repos with a shared build workflow
 
-**Status:** Built (2026-11-21). The first real run, from `idp-sample-service`, passed the scan, pushed and committed the tag. The new ghcr package came out private, so a cluster couldn't pull it until it was made public by hand. Signature verification and admission on a cluster are not yet confirmed.
+**Status:** Built (2026-11-21). The first real run, from `idp-sample-service`, passed the scan, pushed and committed the tag. The new ghcr package came out private, so a cluster couldn't pull it until it was made public by hand. With the package public, `cosign verify` against the policy's identity regex passed on the built image, which confirms the signature carries this repo's workflow identity. Admission on a cluster is not yet confirmed.
 
 ## Context
 `apps/*.yaml` already deploys a folder of `WebService` files from another repo (`external-apps`). That covers the manifests, but not the image. The cluster only runs `ghcr.io/kushan94` images signed by a workflow in this repo (`verify-platform-images`), so an app repo that builds and signs its own image would be refused, and one that doesn't sign would need an exception.
@@ -27,12 +27,12 @@
 - **The trust boundary is every repo under the account that calls the workflow.** The cluster trusts the platform workflow's signature, so the scan is the only gate: a compromised app repo or token can ship any code that passes it. The `workloads` project limits manifests, not code.
 - **App repos call the workflow at `@main`,** so a bad change to `app-deploy.yml` or `quality-image.yml` reaches every app at once, and this repo's branch protection only blocks force-push and deletion.
 - **The branch guard trusts the app repo's default branch.** Whoever can push to it can deploy, and nothing here requires review in the app repo.
-- **Unverified:** the signature identity against the policy on a real cluster (`cosign verify`, then an admission test), and a private package failing as `ImagePullBackOff`.
+- **Unverified:** admission on a real cluster, and a private package failing as `ImagePullBackOff`. Verify locally with cosign v3: the signature is stored in the newer bundle format, and cosign v2 reports "no signatures found".
 
 Follow-ups, in order:
 1. Pin app repos to a tag or SHA of the workflow instead of `@main`, and release the tag deliberately.
 2. Require review for changes under `.github/workflows/` (a CODEOWNERS rule, or a ruleset if the Actions push problem in the notes is solved).
-3. Verify the signature and run an admission test on a real cluster, then record the result here.
+3. Run an admission test on a real cluster, then record the result here. (The signature itself is verified.)
 
 ### Moving to ECR (deferred until OIDC, PR #37)
 With the OIDC provider blocked, ECR means a long-lived push key in every app repo, so it waits for OIDC, when the workflow can assume a role with no stored key. When it is done:
