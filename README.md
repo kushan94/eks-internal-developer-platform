@@ -371,6 +371,7 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0024: Limit where services can connect](docs/adr/0024-egress-policies.md)
 - [ADR 0025: Cost per service with OpenCost](docs/adr/0025-cost-per-service.md)
 - [ADR 0029: Karpenter for node autoscaling, on-demand only](docs/adr/0029-karpenter-on-demand.md)
+- [ADR 0030: Deploying from application repos with a shared build workflow](docs/adr/0030-app-repos.md)
 
 ## License
 [MIT](LICENSE)
