@@ -34,8 +34,12 @@ Follow-ups, in order:
 2. Require review for changes under `.github/workflows/` (a CODEOWNERS rule, or a ruleset if the Actions push problem in the notes is solved).
 3. Verify the signature and run an admission test on a real cluster, then record the result here.
 
-### Moving to ECR (deferred until OIDC, PR #37)
-With the OIDC provider blocked, ECR means a long-lived push key in every app repo, so it waits for OIDC, when the workflow can assume a role with no stored key. When it is done:
+### Moving to ECR (2026-11-22: decided to do it now, with stored keys)
+The article is stronger with an AWS-native registry, so this is being done before OIDC (PR #37). With the OIDC provider blocked, each app repo holds its own push-only key, until OIDC replaces the keys with a role. The steps:
+1. **Registries and keys (done in the bootstrap stack):** `infra/bootstrap/apps.tf` creates `idp-apps/<repo>` (immutable tags, scan on push, last 10 images kept) and a user that can push only to it, for every file in `apps/`. Registries outlive the nightly destroy. `scripts/app-repo-setup.sh <repo>` stores the key in the app repo's `aws-build` environment, which only main can use.
+2. The reusable workflow and the policies move to ECR, then an admission test on a cluster.
+
+Things to get right:
 - Kyverno needs credentials, through Pod Identity, to read signatures from private ECR. A mistake there makes `required: true` refuse every pod.
 - The policies name `ghcr.io/kushan94/`. An ECR address contains the account ID, which is kept out of Git, so it has to be passed in like the domain, with a test that a wrong or missing value can't allow too much or reject everything.
 - Tags are immutable, so a rerun of the same commit can't push again.
