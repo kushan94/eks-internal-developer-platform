@@ -237,6 +237,8 @@ test: ## Render the WebService composition for each runtime, database class, pro
 	scripts/test-drill-lib.sh
 	@# The Promote workflow's branch name can't be blocked by a branch named promote.
 	scripts/test-promote-branch.sh
+	@# The App deploy workflow's tag bump and its default-branch guard.
+	scripts/test-app-deploy.sh
 	@# Alloy's log pipeline must parse.
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) '.data["config.alloy"]' platform/observability/logs/alloy-config.yaml > .test/config.alloy
 	docker run --rm -v $(CURDIR)/.test:/w $(ALLOY_IMAGE) fmt /w/config.alloy > /dev/null
