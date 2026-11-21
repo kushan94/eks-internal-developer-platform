@@ -14,13 +14,13 @@ results:
     resources: [bad-latest, bad-no-tag]
     result: fail
   - policy: disallow-latest-tag
-    resources: [good, bad-registry, bad-resources]
+    resources: [good, good-ecr, bad-registry, bad-resources, bad-ecr-other-repo, bad-ecr-other-region, bad-ecr-lookalike]
     result: pass
   - policy: allowed-registries
-    resources: [bad-registry]
+    resources: [bad-registry, bad-ecr-other-repo, bad-ecr-other-region, bad-ecr-lookalike]
     result: fail
   - policy: allowed-registries
-    resources: [good, bad-latest, bad-no-tag, bad-resources]
+    resources: [good, good-ecr, bad-latest, bad-no-tag, bad-resources]
     result: pass
   - policy: require-resources
     resources: [bad-resources]

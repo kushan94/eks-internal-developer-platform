@@ -17,6 +17,8 @@ data:
     publicSubnetCidrs:
       - 10.42.128.0/20
       - 10.42.144.0/20
+  # Where images under idp-apps/ live (the platform's ECR registry).
+  ecrRegistry: 111122223333.dkr.ecr.eu-west-1.amazonaws.com
   # true with Terraform's production profile: in-cluster databases run three instances.
   highAvailability: false
   # Only on EKS: the shared RDS instance for managed databases.

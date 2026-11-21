@@ -66,10 +66,16 @@ spec:
     - name: allowed
       expression: >-
         ['ghcr.io/kushan94/', 'ghcr.io/stefanprodan/', 'ghcr.io/cloudnative-pg/', 'index.docker.io/nginxinc/']
+    # The platform's own ECR repositories, in any account: the account ID is kept
+    # out of Git, and the signed-images policy decides whether an image is trusted.
+    - name: ecr
+      expression: >-
+        '^[0-9]{12}[.]dkr[.]ecr[.]eu-north-1[.]amazonaws[.]com/idp-apps/[a-z0-9._/-]+$'
     - name: rejected
       expression: >-
-        variables.images.filter(i, !variables.allowed.exists(p,
-          (image(i).registry() + '/' + image(i).repository()).startsWith(p)))
+        variables.images.filter(i, !(variables.allowed.exists(p,
+          (image(i).registry() + '/' + image(i).repository()).startsWith(p)) ||
+          (image(i).registry() + '/' + image(i).repository()).matches(variables.ecr)))
   validations:
     - expression: size(variables.rejected) == 0
       messageExpression: >-

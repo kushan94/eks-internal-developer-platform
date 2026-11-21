@@ -5,12 +5,17 @@ name: App deploy
 #
 #   jobs:
 #     deploy:
-#       permissions: { contents: write, packages: write, id-token: write }
+#       permissions: { contents: write, id-token: write }
 #       uses: kushan94/eks-internal-developer-platform/.github/workflows/app-deploy.yml@main
 #
-# It lints and scans the image, pushes it to GitHub's container registry as
-# ghcr.io/<owner>/<repo>:<commit>, signs it, and records the tag in the app
-# repo's deploy folder, which Argo CD watches (see apps/README.md).
+# It lints and scans the image, pushes it to the platform's ECR registry as
+# idp-apps/<repo>:<commit>, signs it, and records the tag in the app repo's
+# deploy folder, which Argo CD watches (see apps/README.md). The deploy file
+# names the image as idp-apps/<repo>:<commit>, without the registry address,
+# because that holds the AWS account ID. The WebService composition adds it.
+#
+# The calling repo needs an aws-build environment, limited to main, holding that
+# repo's push-only key: scripts/app-repo-setup.sh in this repo creates it.
 #
 # The signature carries this workflow's identity, not the app repo's. That is
 # what the cluster's signed-images policy checks, so an image only gets in by
@@ -52,8 +57,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      packages: write
       id-token: write
+    # The caller's environment, which holds only this repo's push-only ECR key
+    # and which only its default branch can use.
+    environment: aws-build
+    env:
+      AWS_REGION: eu-north-1
     steps:
       # The signature doesn't record which branch called this workflow, so a
       # branch could otherwise get an image the cluster trusts.
@@ -64,16 +73,25 @@ jobs:
         run: |
           [ "$REF" = "refs/heads/${DEFAULT_BRANCH}" ] || { echo "::error::deploys only run on ${DEFAULT_BRANCH}, not ${REF}"; exit 1; }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          mask-aws-account-id: true
+      - id: ecr
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+      # The repository is idp-apps/ plus the repo's name, which Terraform
+      # created for this repo (infra/bootstrap/apps.tf).
       - name: Name the image
         id: image
         env:
           REPOSITORY: ${{ github.repository }}
-        run: echo "name=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
-      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          ref="idp-apps/${REPOSITORY#*/}"
+          echo "ref=${ref,,}" >> "$GITHUB_OUTPUT"
+          echo "name=${REGISTRY}/${ref,,}" >> "$GITHUB_OUTPUT"
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
@@ -86,7 +104,6 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.image.outputs.name }}:${{ github.sha }}
-          # Links the package to the repo, so it takes the repo's visibility.
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           cache-from: type=gha
@@ -99,7 +116,8 @@ jobs:
         run: cosign sign --yes "${IMAGE}@${DIGEST}"
       - name: Deploy the new image through Git
         env:
-          IMAGE: ${{ steps.image.outputs.name }}
+          # The short name: the registry address stays out of the repo.
+          IMAGE: ${{ steps.image.outputs.ref }}
           DEPLOY_FILE: ${{ inputs.deploy-file }}
         run: |
           # The file holds exactly one image, so a mistyped path or a second

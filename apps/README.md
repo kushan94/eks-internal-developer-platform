@@ -14,7 +14,14 @@ The repo must be under the GitHub account in `gitops/root/values.yaml`, and the 
 
 ## Building the image in the app repo
 
-An app repo that builds its own image calls the platform's `app-deploy.yml`. It scans the image, pushes it to `ghcr.io/<owner>/<repo>`, signs it, and commits the new tag to `deploy/web.yaml`, which Argo CD then deploys. The cluster trusts the signature because it comes from this repo's workflow, so an image can't skip the scan. Put this in the app repo as `.github/workflows/deploy.yml`:
+An app repo that builds its own image calls the platform's `app-deploy.yml`. It scans the image, pushes it to the platform's private ECR registry as `idp-apps/<repo>`, signs it, and commits the new tag to `deploy/web.yaml`, which Argo CD then deploys. The cluster trusts the signature because it comes from this repo's workflow, so an image can't skip the scan.
+
+The deploy file names the image as `idp-apps/<repo>:<commit>`, without the registry address, which holds the AWS account ID. The WebService composition adds the address from the cluster's environment.
+
+To onboard a repo:
+1. Add `apps/<repo>.yaml` here and merge it.
+2. Run `make bootstrap`, which creates the repo's ECR repository and a push-only key for it, then `scripts/app-repo-setup.sh <repo>`, which stores that key in the repo's `aws-build` environment, limited to main. The repo must be public, because GitHub can't limit an environment to a branch in a private repo on the free plan.
+3. Put this in the app repo as `.github/workflows/deploy.yml`:
 
 ```yaml
 name: Deploy
@@ -24,7 +31,7 @@ on:
     paths-ignore: [deploy/**]
 jobs:
   deploy:
-    permissions: { contents: write, packages: write, id-token: write }
+    permissions: { contents: write, id-token: write }
     uses: kushan94/eks-internal-developer-platform/.github/workflows/app-deploy.yml@main
 ```
 

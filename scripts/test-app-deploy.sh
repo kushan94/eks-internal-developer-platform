@@ -37,14 +37,14 @@ git -C "$dir/app" push -q origin HEAD 2> /dev/null
 
 # bump <sha> [deploy file]: runs the workflow's step inside the app repo.
 bump() {
-  (cd "$dir/app" && GITHUB_SHA="$1" GITHUB_STEP_SUMMARY=/dev/null IMAGE=ghcr.io/kushan94/orders DEPLOY_FILE="${2:-deploy/web.yaml}" bash -e "$dir/bump.sh") > "$dir/out.log" 2>&1
+  (cd "$dir/app" && GITHUB_SHA="$1" GITHUB_STEP_SUMMARY=/dev/null IMAGE=idp-apps/orders DEPLOY_FILE="${2:-deploy/web.yaml}" bash -e "$dir/bump.sh") > "$dir/out.log" 2>&1
 }
 
 sha1=1111111111111111111111111111111111111111
 sha2=2222222222222222222222222222222222222222
 
 bump "$sha1" && check "the first build replaces the image" ok || check "the first build replaces the image" fail
-[ "$(grep -c "^  image: ghcr.io/kushan94/orders:$sha1$" "$dir/app/deploy/web.yaml")" = 1 ] && check "the file names the new tag" ok || check "the file names the new tag" fail
+[ "$(grep -c "^  image: idp-apps/orders:$sha1$" "$dir/app/deploy/web.yaml")" = 1 ] && check "the file names the new tag" ok || check "the file names the new tag" fail
 [ "$(git -C "$dir/remote.git" log -1 --format=%s)" = "Deploy 1111111" ] && check "the commit reached the remote" ok || check "the commit reached the remote" fail
 [ "$(grep -c '^  port: 8080$' "$dir/app/deploy/web.yaml")" = 1 ] && check "the rest of the file is untouched" ok || check "the rest of the file is untouched" fail
 

@@ -37,7 +37,12 @@ Follow-ups, in order:
 ### Moving to ECR (2026-11-22: decided to do it now, with stored keys)
 The article is stronger with an AWS-native registry, so this is being done before OIDC (PR #37). With the OIDC provider blocked, each app repo holds its own push-only key, until OIDC replaces the keys with a role. The steps:
 1. **Registries and keys (done in the bootstrap stack):** `infra/bootstrap/apps.tf` creates `idp-apps/<repo>` (immutable tags, scan on push, last 10 images kept) and a user that can push only to it, for every file in `apps/`. Registries outlive the nightly destroy. `scripts/app-repo-setup.sh <repo>` stores the key in the app repo's `aws-build` environment, which only main can use.
-2. The reusable workflow and the policies move to ECR, then an admission test on a cluster.
+2. **The workflow, composition and policies (built, not yet run on a cluster):**
+   - `app-deploy.yml` logs in to ECR with the repo's key from its `aws-build` environment, pushes `<registry>/idp-apps/<repo>:<commit>` and signs it.
+   - The deploy file names the image `idp-apps/<repo>:<commit>`. The WebService composition adds the registry address from `ecrRegistry` in the `aws-platform` EnvironmentConfig, so the account ID stays out of the public app repo. It fails with a clear message where there is no registry, such as on kind.
+   - `allowed-registries` accepts `<12 digits>.dkr.ecr.eu-north-1.amazonaws.com/idp-apps/...` in any account, because the account ID is kept out of Git. `verify-platform-images` also matches those images and requires the platform workflow's signature, which is the real gate.
+   - Kyverno's admission controller reads signatures from private ECR with a Pod Identity role limited to `idp-apps/*` (`infra/terraform/kyverno.tf`) and `credentials.providers: [amazon]`.
+3. An admission test on a cluster.
 
 Things to get right:
 - Kyverno needs credentials, through Pod Identity, to read signatures from private ECR. A mistake there makes `required: true` refuse every pod.

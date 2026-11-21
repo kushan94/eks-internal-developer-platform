@@ -46,6 +46,14 @@ spec:
             {{- $env := default dict (index .context "apiextensions.crossplane.io/environment") }}
             {{- /* The production profile on EKS sets this in the aws-platform EnvironmentConfig. */}}
             {{- $ha := dig "highAvailability" false $env }}
+            {{- /* An image under idp-apps/ is in the platform's ECR registry. Its address holds the
+                   account ID, so the environment supplies it and the repos that name the image don't. */}}
+            {{- $image := $xr.spec.image }}
+            {{- if hasPrefix "idp-apps/" $image }}
+            {{- $registry := dig "ecrRegistry" "" $env }}
+            {{- if not $registry }}{{ fail "images under idp-apps/ need ecrRegistry in the aws-platform EnvironmentConfig, which only EKS provides" }}{{ end }}
+            {{- $image = printf "%s/%s" $registry $image }}
+            {{- end }}
             {{- /* Lets Backstage's Kubernetes plugin find everything this WebService creates. */}}
             {{- /* A service in several environments shares one ID, set as a label on its
                    WebService; otherwise it's <namespace>-<name>. */}}
@@ -144,7 +152,7 @@ spec:
                       type: RuntimeDefault
                   containers:
                     - name: app
-                      image: {{ $xr.spec.image }}
+                      image: {{ $image }}
                       ports:
                         - name: http
                           containerPort: {{ $xr.spec.port }}
@@ -433,7 +441,7 @@ spec:
             {{- end }}
             {{- $awsName := printf "idp-%s-%s" $ns $name }}
             {{- $logGroup := printf "/idp/%s/%s" $ns $name }}
-            {{- $container := dict "name" "app" "image" $xr.spec.image "essential" true
+            {{- $container := dict "name" "app" "image" $image "essential" true
                   "portMappings" (list (dict "containerPort" $xr.spec.port "protocol" "tcp"))
                   "logConfiguration" (dict "logDriver" "awslogs" "options" (dict "awslogs-group" $logGroup "awslogs-region" $aws.region "awslogs-stream-prefix" "app")) }}
             {{- /* The task definition waits for the database password to reach Secrets Manager. */}}

@@ -1,0 +1,10 @@
+apiVersion: platform.example.org/v1alpha1
+kind: WebService
+metadata:
+  name: orders
+  namespace: team-a
+spec:
+  runtime: kubernetes
+  image: idp-apps/orders:0123456789abcdef
+  port: 8080
+  replicas: 2
