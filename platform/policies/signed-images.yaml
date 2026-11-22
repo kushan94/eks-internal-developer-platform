@@ -35,17 +35,25 @@ spec:
     mutateDigest: false
     verifyDigest: false
     required: true
+  # Kyverno takes one identity per attestor, so each trusted workflow is its own
+  # attestor, and an image passes if any of them verifies it.
   attestors:
+    # The platform's own image workflows, on main.
     - name: platformCI
       cosign:
         keyless:
           identities:
-            # The platform's own image workflows, on main.
             - issuer: https://token.actions.githubusercontent.com
               subjectRegExp: '^https://github\.com/kushan94/eks-internal-developer-platform/\.github/workflows/visits-image\.yml@refs/heads/main$'
-            # Application repos' images, signed by the shared build workflow at a
-            # release tag. Main is deliberately not accepted for it, so a change
-            # merged to main reaches no app until a tag is cut.
+        ctlog:
+          url: https://rekor.sigstore.dev
+    # Application repos' images, signed by the shared build workflow at a
+    # release tag. Main is deliberately not accepted for it, so a change
+    # merged to main reaches no app until a tag is cut.
+    - name: appDeploy
+      cosign:
+        keyless:
+          identities:
             - issuer: https://token.actions.githubusercontent.com
               subjectRegExp: '^https://github\.com/kushan94/eks-internal-developer-platform/\.github/workflows/app-deploy\.yml@refs/tags/app-deploy-v[0-9]+$'
         ctlog:
@@ -53,7 +61,7 @@ spec:
   validations:
     - expression: >-
         images.containers.filter(i, i.startsWith('ghcr.io/kushan94/') || i.contains('.dkr.ecr.eu-north-1.amazonaws.com/idp-apps/'))
-          .all(i, verifyImageSignatures(i, [attestors.platformCI]) > 0)
+          .all(i, verifyImageSignatures(i, [attestors.platformCI, attestors.appDeploy]) > 0)
       message: >-
         ghcr.io/kushan94 and idp-apps/ ECR images must be signed by the platform's visits image
         workflow on main or its app-deploy workflow at a release tag

@@ -13,6 +13,16 @@ trap 'rm -rf "$dir"' EXIT
 docker run --rm -i -v "$PWD":/repo -w /repo mikefarah/yq:4.47.2 '.spec.attestors[].cosign.keyless.identities[].subjectRegExp' "$policy" > "$dir/regexps"
 [ "$(grep -c . "$dir/regexps")" -ge 2 ] || { echo "  FAIL  couldn't read the identities from $policy"; exit 1; }
 
+# Kyverno's image verifier refuses an attestor with more than one identity
+# ("multiple identities are not supported"), which blocked every signed image on
+# a cluster. So each attestor must have exactly one, and the validation must ask
+# every attestor, or one trusted workflow would be refused.
+yq() { docker run --rm -i -v "$PWD":/repo -w /repo mikefarah/yq:4.47.2 "$@"; }
+[ "$(yq '[.spec.attestors[] | select((.cosign.keyless.identities | length) != 1)] | length' "$policy")" = 0 ] && check "each attestor has exactly one identity" ok || check "each attestor has exactly one identity" fail
+for name in $(yq '.spec.attestors[].name' "$policy"); do
+  [ "$(yq '.spec.validations[].expression' "$policy" | grep -c "attestors\.$name\b")" -ge 1 ] && check "the validation asks attestor $name" ok || check "the validation asks attestor $name" fail
+done
+
 # trusted <subject>: whether any of the policy's expressions accepts it.
 trusted() { while read -r re; do printf '%s\n' "$1" | grep -Eq "$re" && return 0; done < "$dir/regexps"; return 1; }
 expect() { if trusted "$2"; then [ "$1" = yes ] && check "$3" ok || check "$3" fail; else [ "$1" = no ] && check "$3" ok || check "$3" fail; fi; }
