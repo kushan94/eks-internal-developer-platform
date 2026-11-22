@@ -32,10 +32,12 @@ on:
 jobs:
   deploy:
     permissions: { contents: write, id-token: write }
-    uses: kushan94/eks-internal-developer-platform/.github/workflows/app-deploy.yml@main
+    uses: kushan94/eks-internal-developer-platform/.github/workflows/app-deploy.yml@app-deploy-v1
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 ```
+
+Call it at a release tag, as above. The cluster only trusts images signed by `app-deploy.yml` at an `app-deploy-v<N>` tag, so calling it at `@main` builds an image the cluster refuses. To release a new version, see [ADR 0030](../docs/adr/0030-app-repos.md).
 
 It builds `Dockerfile` at the repo root and edits `deploy/web.yaml`, which must have exactly one `  image:` line. The `context`, `file` and `deploy-file` inputs change those. It only runs from the repo's default branch. See [ADR 0030](../docs/adr/0030-app-repos.md).
