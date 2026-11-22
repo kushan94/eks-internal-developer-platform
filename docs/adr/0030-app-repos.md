@@ -19,7 +19,7 @@
 
 ## Consequences
 - **App repos need only `contents: write`, `packages: write` and `id-token: write` in the calling job,** and a `deploy/` folder.
-- **The first package push is private,** although the image carries the source label (confirmed 2026-11-21: an anonymous pull was refused). Package visibility can't be set through the API, so each app repo needs a one-time change to Public in its package settings, or an image pull secret.
+- **The first ghcr package push was private** (2026-11-21: an anonymous pull was refused), because the sample repo was private and a package takes its repo's visibility. Package visibility can't be set through the API, so it needed a manual change to Public. ECR, which replaced ghcr for app images, has no such step.
 - **The workflow calls the scan by its full name at `@main`,** because a `./` path would look in the app repo. A change to the scan reaches app repos when it merges, not when a pull request tests it.
 - **Not yet done:** promotion across environments in an app repo (the Promote workflow edits only this repo), and a Backstage form.
 
