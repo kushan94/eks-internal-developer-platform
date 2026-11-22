@@ -38,11 +38,11 @@ Kyverno accepts one identity per attestor. The policy denied every signed image,
 
 The lesson isn't that the agent made a mistake. A person would have made it too. The lesson is that tests written by the same author, from the same understanding, share the same blind spot, and the only thing that disagreed was a real cluster. I verified the fix live with server dry-runs against the cluster, and the repo's tests now cover both identities. [YOU: say whether a cluster check before merging is now a rule.] It cost an afternoon, and the lesson is the part I'd keep.
 
-## Cutting what we'd already built
+## The assistant that's still to come
 
-We built a dashboard with an AI assistant that diagnoses cluster problems, with read-only tools, a token budget and a daily spend cap. It was tested against deliberately broken workloads on kind. It had no login, and I couldn't call a model from my AWS account: Claude on Amazon Bedrock needed a use-case form for the older models and wasn't available for the newest ones here.
+The next piece is a dashboard with an AI assistant that diagnoses cluster problems, with read-only tools, a token budget and a daily spend cap. The dashboard and the assistant's tools are built and tested against deliberately broken workloads on kind. It isn't deployed yet. It has no login, and I couldn't call a model from my AWS account: Claude on Amazon Bedrock needed a use-case form for the older models and wasn't available for the newest ones here.
 
-I decided to keep it as a feature to turn on later. [YOU: your reason in your own words.] An agent will happily keep building, and "built and tested" feels like "done". But it had never run against the real model, so I couldn't say how often it was right, and I didn't want to ship what I couldn't run. I'd rather say plainly what I haven't run than ship it and hope.
+So I'm holding it back until it can run against the real model. [YOU: your reason in your own words.] An agent will happily keep building, and "built and tested" feels like "done". But I can't yet say how often the assistant is right, and I'd rather say plainly what I haven't run than ship it and hope.
 
 ## Choosing the harder registry
 
@@ -59,8 +59,8 @@ In the end, a small Go service in its own repo built, scanned, signed and pushed
 - **Cut things.** An agent has no cost for building more, but you do.
 - **Write the failures down as they happen.** I kept notes after every session, and this account is mostly built from those notes. Memory is the thing the agent doesn't have between sessions, and you do.
 
-The platform rebuilds from nothing in about half an hour, at roughly sixty cents an hour in its production shape. The agent wrote a great deal of it. The part that was mine was deciding what to build, what to refuse and what to throw away, and I'd do it the same way again.
+This is still in development. The assistant is the next thing to land, GitHub OIDC for CI is waiting on AWS, and ECS services aren't reachable from outside the VPC yet. What exists rebuilds from nothing in about half an hour, at roughly sixty cents an hour in its production shape. The agent wrote a great deal of it. The part that was mine was deciding what to build, what to refuse and what to throw away, and I'd do it the same way again.
 
 ---
 
-*The code, 30 decision records, and notes on everything that broke: [github.com/kushan94/eks-internal-developer-platform](https://github.com/kushan94/eks-internal-developer-platform).*
+*Still in development. The code, 30 decision records, and notes on everything that broke: [github.com/kushan94/eks-internal-developer-platform](https://github.com/kushan94/eks-internal-developer-platform).*
