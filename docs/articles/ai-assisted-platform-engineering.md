@@ -36,7 +36,7 @@ To let applications in other repos deploy through the platform, the cluster has 
 
 Kyverno accepts one identity per attestor. The policy denied every signed image, including the ones already running. `make test` passed, because the Kyverno CLI test can't run the signature verifier. I found it on the cluster, from a Crossplane event and then Kyverno's logs, and the fix was one attestor per workflow.
 
-The lesson isn't that the agent made a mistake. A person would have made it too. The lesson is that tests written by the same author, from the same understanding, share the same blind spot, and the only thing that disagreed was a real cluster. The agent now runs a server dry-run against the live policy before one merges, and the repo's tests cover both identities. It cost an afternoon, and the lesson is the part I'd keep.
+The lesson isn't that the agent made a mistake. A person would have made it too. The lesson is that tests written by the same author, from the same understanding, share the same blind spot, and the only thing that disagreed was a real cluster. I verified the fix live with server dry-runs against the cluster, and the repo's tests now cover both identities. [YOU: say whether a cluster check before merging is now a rule.] It cost an afternoon, and the lesson is the part I'd keep.
 
 ## Cutting what we'd already built
 
@@ -59,7 +59,7 @@ In the end, a small Go service in its own repo built, scanned, signed and pushed
 - **Cut things.** An agent has no cost for building more, but you do.
 - **Write the failures down as they happen.** I kept notes after every session, and the article is mostly those notes. Memory is the thing the agent doesn't have between sessions, and you do.
 
-The platform rebuilds from nothing in about half an hour, at roughly sixty cents an hour in its production shape, and the nightly destroy has never needed to be skipped. The agent wrote a great deal of it. The part that was mine was deciding what to build, what to refuse and what to throw away, and I'd do it the same way again.
+The platform rebuilds from nothing in about half an hour, at roughly sixty cents an hour in its production shape. The agent wrote a great deal of it. The part that was mine was deciding what to build, what to refuse and what to throw away, and I'd do it the same way again.
 
 ---
 
