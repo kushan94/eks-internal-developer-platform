@@ -3,9 +3,9 @@
 The article is `building-an-idp-on-eks.md`. Work through this before posting.
 
 ## Decisions and facts to settle
-- **The repository is private.** The article links to it as the place to read the code. Make it public first, or change the two links and the sentence that says the code is there.
-  A gitleaks scan of the full history (2026-11-20) found one hit: a sample JWT in a redaction test, not a secret.
-- **The rebuild time is in the article, from two runs:** 34 minutes (2026-11-18) and 31 (2026-11-19, with Karpenter and the cert-manager deadlock fix), both from the start of the apply to a healthy platform with no repair by hand. If the opening still quotes the earlier 37-minute figure, replace it. Two runs say little about variance.
+- **The repository is public.** Check that the two links and the sentence saying the code is there still read right.
+  A gitleaks scan of the full history (2026-11-20) found one hit: a sample JWT in a redaction test, not a secret. Scan again before posting, since the history has grown.
+- **The rebuild time is in the article, from three runs:** 34 minutes (2026-11-18), 31 (2026-11-19, with Karpenter and the cert-manager deadlock fix) and 32m14s (2026-11-22, production profile), each from the start of the apply to a healthy platform with no repair by hand. Check the opening if it still quotes the earlier 37-minute figure.
 - **"Where it stands" and the new Karpenter section reflect 2026-11-19.** They say the dashboard and assistant were left out on purpose, and that Karpenter is on-demand only because Spot is denied. Check the Karpenter figures against ADR 0029 if you edit them.
 - **The Backstage fix is confirmed on EKS** (second session) and the article says so. Nothing to change unless the launcher changes.
 - **The assistant is deferred (2026-11-19) and has not been run against the real model.** The last section says so, and should say it is a feature kept for later, with why (see ADR 0026, "Enabling it later"). Bedrock isn't usable from this account yet. If you run `scripts/diagnose-eval.sh --compare` with a key before publishing, add the result (diagnosed N of 7 without and with runbooks, and the cost). That is the most interesting number the article could have.

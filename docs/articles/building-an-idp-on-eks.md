@@ -20,7 +20,7 @@ kind: WebService
 metadata:
   name: visits
 spec:
-  image: ghcr.io/kushan94/idp-visits:52c8920
+  image: idp-apps/idp-visits:52c8920
   port: 8080
   replicas: 2
   public: true
@@ -49,13 +49,13 @@ Developers don't write the file by hand. A Backstage form writes it and opens a 
 3. **Crossplane** owns the `WebService` API. One composition, written with Go templates, turns each one into the resources for its runtime and options.
 4. **Controllers do the rest:** the AWS Load Balancer Controller and ExternalDNS for the URL, CloudNativePG or provider-sql for the database.
 
-Guardrails apply to every team namespace: Pod Security's `restricted` profile, Kyverno policies (no `:latest`, approved registries, resource requests) and keyless image signing. CI signs images with cosign using its GitHub identity, and Kyverno only admits `ghcr.io/kushan94` images signed by this repo's workflows on `main`, so there are no signing keys to store.
+Guardrails apply to every team namespace: Pod Security's `restricted` profile, Kyverno policies (no `:latest`, approved registries, resource requests) and keyless image signing. CI signs images with cosign using its GitHub identity, and Kyverno only admits images from this account's registries (`ghcr.io/kushan94` and the private ECR repositories under `idp-apps/`) that one of two workflows signed: the platform's own image workflow on `main`, or the shared app build workflow at a release tag. There are no signing keys to store.
 
 I chose Crossplane because I wanted the developer API to be a Kubernetes resource, so Argo CD, Backstage and `kubectl` all treat it the same. The cost is that I upgrade it and its providers myself. I self-hosted Backstage because a SaaS portal would have hidden the parts I wanted to learn.
 
 ## What destroying it every night forces
 
-**Anything that must survive lives outside the cluster.** A small bootstrap Terraform stack creates the state bucket, the container registry, the DNS zones and certificate, and the GitHub App keys in Secrets Manager, once.
+**Anything that must survive lives outside the cluster.** A small bootstrap Terraform stack creates the state bucket, the container registries (one ECR repository per application repo, each with its own push-only key), the DNS zones and certificate, and the GitHub App keys in Secrets Manager, once.
 
 **Credentials can't live only in the cluster.** External Secrets reads Secrets Manager through EKS Pod Identity, which works on a cluster that is ten minutes old. Sealed Secrets would need a decryption key for every new cluster.
 
@@ -94,7 +94,7 @@ Prefix delegation in the `vpc-cni` add-on hands out /28 prefixes instead of sing
 
 ## Testing the sign-in before AWS allowed it
 
-Without an OIDC provider, GitHub Actions can't sign in to AWS with short-lived credentials. CI uses IAM user keys instead. I built the OIDC version, role trust policies included, but couldn't try it.
+Without an OIDC provider, GitHub Actions can't sign in to AWS with short-lived credentials. CI uses IAM user keys instead, and so do the application repos, which hold a push-only ECR key each as repository secrets. I built the OIDC version, role trust policies included, but couldn't try it.
 
 Rather than wait for AWS Support, I tested everything that doesn't need AWS. A tiny workflow prints the claims in the token GitHub would present, without calling any AWS API. My trust policies compared the token's subject with this:
 
@@ -182,11 +182,14 @@ The hardening work had only ever run on a local cluster. A single session on the
 
 **Each session left a volume behind.** Kubernetes keeps a StatefulSet's volume claims when it's deleted, so Loki's 5 GiB volume outlived every destroy. I only found it by counting what was left after the destroy. The destroy now sweeps these, and it has run in real destroys: the nightly one deleted the leftover volume, and the next one found nothing left.
 
+
 A second session on the same shape turned up a fifth problem. The cluster went from nothing to healthy in about 37 minutes: 17 for Terraform, about 4 to install Argo CD and the platform settings, and 15 waiting for the apps, which finished with 19 seconds to spare. Nothing was broken. The load balancer controller's chart makes a new certificate every time it is rendered, so Argo CD kept seeing it as drift and re-syncing it, with longer and longer pauses between tries. My fix was to tell Argo CD to ignore those fields, and I tested it by editing them on the live cluster. The next build showed what that test missed: the Secret and the webhook configurations were created in different syncs, from different renders, so the webhook's certificate authority didn't match the Secret's. Every call to the webhook failed, which blocked Backstage and kept Prometheus from starting, and the wait ran out. The fix went back out, and what I wanted instead was a certificate that doesn't change on every render. A check that edits the fields I ignore can't tell me whether the ignored fields are right to ignore.
 
-The next session tried that: cert-manager issues the certificate and injects its authority into the webhooks, so two renders are identical and the two halves can't drift apart. The controller came up healthy on its first sync. The wait still failed, for a different reason. The EKS API server started rejecting writes with `etcdserver: throttle: too many requests`, and the Prometheus stack's sync stalled behind a missing operator. Counting writes by user in the audit log found the cause of most of the load, and nothing had reported it: four Crossplane provider revisions shared one service account, each claimed it as owner, and they rewrote it about 40 times a second for the whole session. One service account per provider ended the loop. A rebuild after that took about 34 minutes from the start of the apply to a healthy platform, with no repair by hand, and a second one later that day, with more in it, took 31. The throttling still showed up while Crossplane installed its providers, and the builds recovered on their own. Two runs isn't enough to say how much the time varies, or whether the stall can come back.
+The next session tried that: cert-manager issues the certificate and injects its authority into the webhooks, so two renders are identical and the two halves can't drift apart. The controller came up healthy on its first sync. The wait still failed, for a different reason. The EKS API server started rejecting writes with `etcdserver: throttle: too many requests`, and the Prometheus stack's sync stalled behind a missing operator. Counting writes by user in the audit log found the cause of most of the load, and nothing had reported it: four Crossplane provider revisions shared one service account, each claimed it as owner, and they rewrote it about 40 times a second for the whole session. One service account per provider ended the loop. A rebuild after that took about 34 minutes from the start of the apply to a healthy platform, with no repair by hand, and a second one later that day, with more in it, took 31. The throttling still showed up while Crossplane installed its providers, and the builds recovered on their own. A third rebuild, on the production profile, took 32 minutes. Three runs agree to within about three minutes, which is too few to say whether the stall can come back.
 
 None of these were in the features. They were at the edges: first boot, a check's parsing, a stale branch, the order of a deletion. A platform you destroy every night crosses those edges every day, which is the point.
+
+**A policy change I'd tested passed every image through the wrong door.** To trust a second signing workflow I put two identities in one Kyverno attestor. Kyverno accepts one identity per attestor, so the policy denied every signed image, including the ones already running. `make test` passed, because the Kyverno CLI test can't run the signature verifier. I found it on the production cluster, from an event on a composition and then Kyverno's logs, and fixed it with one attestor per workflow. The test now checks both, and the lesson is that a policy change needs an admission test on a real cluster before it merges.
 
 ## Karpenter, and a dry run that said yes
 
@@ -200,11 +203,30 @@ What broke was around it. My cert-manager change from the day before deadlocked 
 
 **Lesson: a dry run isn't a launch, and a fake built from the same belief as the code can't catch that belief being wrong.**
 
+## Deploying from another repo
+
+A platform where every service's code lives in the platform repo isn't a platform. So an application repo, with its own code and Dockerfile, can deploy through this one. The contract is small:
+
+- **Registration.** A file in `apps/` names the repo. An Argo CD ApplicationSet syncs that repo's `deploy` folder of `WebService` files, and a project limits what those files may create to the allowed kinds, namespaces and repos. The bootstrap Terraform stack reads the same files and creates an ECR repository and a push-only IAM user for each repo.
+- **The build is shared.** The app repo calls one reusable workflow. It scans the image, builds it for both architectures, pushes it to `idp-apps/<repo>`, signs the digest with cosign using its GitHub identity, and commits the new tag into the repo's own `deploy/web.yaml`. Argo CD does the rest, so the only way anything changes is still Git.
+- **The cluster checks the signature.** A Kyverno policy admits an image from those registries only if the shared workflow signed it. Unsigned images are denied, and the sample service I used (a small Go app in its own repo) ran, signed, on the production profile.
+
+I moved from GitHub's registry to ECR for this. The images sit in the same account as the cluster, tags are immutable, each repo gets its own registry and a key that can only push there, and nodes pull with their own IAM role. The file names the image as `idp-apps/<repo>:<tag>`, and the Crossplane composition adds the registry address from the cluster's settings, so the AWS account ID never enters a public repo.
+
+Three things didn't work the way I'd assumed:
+
+**Environment secrets don't reach a reusable workflow.** I had put the push key in an environment limited to `main`. The called workflow got empty credentials. Repository secrets, passed in explicitly, do reach it. So the key can be used from any branch of that repo, which I accepted and wrote down: it can only push to its own repo, and the policy only admits what the shared workflow signed.
+
+**The signature doesn't record the caller's branch.** Its identity is the called workflow's, so a feature branch could produce an image the cluster trusts. The workflow itself refuses to run anywhere but the default branch.
+
+**The shared workflow is code every app runs, so I pinned it.** Callers use a release tag, `app-deploy-v1`, and the policy trusts that workflow only at tags of that form. A change merged to `main` reaches no app until someone cuts a tag, and a ruleset stops a tag being moved or deleted. I'd also have liked required review on the workflow's folder, but on a personal repo with one maintainer there is nobody else to review, so the ADR says that's not enforced.
+
 ## Where it stands
 
 - **Two shapes, one switch.** A `profile` input picks between them. `study` is two zones, one NAT gateway and two nodes, at about $0.40 an hour. `production` is three zones with a NAT gateway and a node in each, Multi-AZ RDS, more replicas of the platform's components and backups, at roughly $0.60 an hour. Even production is destroyed every night.
+- **Other repos:** an application repo can deploy through the platform without its code living here (the section above).
 - **On EKS:** the architecture, both runtimes, databases, guardrails, metrics and alerts, and a deliberately broken service that fired in Slack after exactly five minutes. Then, in one session on the production shape, the hardening work: replicas spread across zones, network isolation enforced by the VPC CNI in both directions, a real promotion through a pull request, autoscaling reading live metrics, logs per environment, cost per service, and both restore drills. That session ran about two hours, roughly $1.2 at the profile's hourly rate.
-- **Left out on purpose:** the dashboard and assistant are built and tested but not deployed. They have no login yet, and the model can't be called from this account: Claude on Amazon Bedrock needs a use-case form for the older models and isn't available at all for the newest ones here, and I haven't tried the Anthropic API. I kept it as a feature to turn on later rather than ship something I can't run. The rebuild time above (31 and 34 minutes) is two runs.
+- **Left out on purpose:** the dashboard and assistant are built and tested but not deployed. They have no login yet, and the model can't be called from this account: Claude on Amazon Bedrock needs a use-case form for the older models and isn't available at all for the newest ones here, and I haven't tried the Anthropic API. I kept it as a feature to turn on later rather than ship something I can't run. The rebuild time above (34, 31 and 32 minutes) is three runs, within about three minutes of each other, so I'd expect around half an hour, but I can't say the stall can't come back.
 - **Waiting on AWS:** GitHub OIDC for CI, which that organization policy blocks. What it denies is anything that creates another way to sign in to the account, which looks deliberate, so I've stopped expecting it to lift. Karpenter looked blocked too, but that was a false result. It runs now, on-demand only, because the same policy denies Spot.
 - **Not done:** one AWS account is not a production setup, and a real platform would separate accounts under AWS Organizations.
 
@@ -212,4 +234,4 @@ What carries over to any platform is the shape: one small API, Git as the only w
 
 ---
 
-*All the code, 28 decision records, and notes on everything that broke: [github.com/kushan94/eks-internal-developer-platform](https://github.com/kushan94/eks-internal-developer-platform).*
+*All the code, 30 decision records, and notes on everything that broke: [github.com/kushan94/eks-internal-developer-platform](https://github.com/kushan94/eks-internal-developer-platform).*
