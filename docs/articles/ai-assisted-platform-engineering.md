@@ -42,11 +42,11 @@ The lesson isn't that the agent made a mistake. A person would have made it too.
 
 We built a dashboard with an AI assistant that diagnoses cluster problems, with read-only tools, a token budget and a daily spend cap. It was tested against deliberately broken workloads on kind. It had no login, and I couldn't call a model from my AWS account: Claude on Amazon Bedrock needed a use-case form for the older models and wasn't available for the newest ones here.
 
-I decided to keep it as a feature to turn on later. [YOU: your reason in your own words.] An agent will happily keep building, and "built and tested" feels like "done". But it had never run against the real model, so I couldn't say how often it was right, and I didn't want to ship what I couldn't run. The article says so, and I think it's stronger for it.
+I decided to keep it as a feature to turn on later. [YOU: your reason in your own words.] An agent will happily keep building, and "built and tested" feels like "done". But it had never run against the real model, so I couldn't say how often it was right, and I didn't want to ship what I couldn't run. I'd rather say plainly what I haven't run than ship it and hope.
 
 ## Choosing the harder registry
 
-For application repos, the simplest registry was GitHub's. I asked to move to ECR and to record the risks first, and told the agent I thought AWS would make a better article. [YOU: confirm, or give the real reason.]
+For application repos, the simplest registry was GitHub's. I asked to move to ECR and to record the risks first, and told the agent I wanted the images in the same account as the cluster, signed and pulled with AWS's own identity. [YOU: confirm, or give the real reason.]
 
 It was more work. Each app gets its own repository and a push-only key. Images are immutable. The cluster reads signatures from private ECR with its own Pod Identity role. And it taught me two things I wouldn't have found otherwise: environment secrets don't reach a reusable workflow, and a signature carries the shared workflow's identity, not the calling branch, so the workflow has to refuse to run anywhere but the default branch. I also corrected a plan that assumed I could limit a key to `main`: my sample repo wasn't public, so its environment couldn't be limited. That became repository secrets, written down as a known limit.
 
@@ -57,7 +57,7 @@ In the end, a small Go service in its own repo built, scanned, signed and pushed
 - **Set the rules before the code.** A nightly destroy, a human gate on anything that creates resources, and no feature counts as done until it has run on a real cluster.
 - **Make the agent verify itself, and then don't trust the verification.** It's good at the first part. The Kyverno incident is the second.
 - **Cut things.** An agent has no cost for building more, but you do.
-- **Write the failures down as they happen.** I kept notes after every session, and the article is mostly those notes. Memory is the thing the agent doesn't have between sessions, and you do.
+- **Write the failures down as they happen.** I kept notes after every session, and this account is mostly built from those notes. Memory is the thing the agent doesn't have between sessions, and you do.
 
 The platform rebuilds from nothing in about half an hour, at roughly sixty cents an hour in its production shape. The agent wrote a great deal of it. The part that was mine was deciding what to build, what to refuse and what to throw away, and I'd do it the same way again.
 
