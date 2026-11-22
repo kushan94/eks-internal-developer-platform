@@ -1,6 +1,6 @@
 # ADR 0030: Deploying from application repos with a shared build workflow
 
-**Status:** Built (2026-11-21). The first real run, from `idp-sample-service`, passed the scan, pushed and committed the tag. The new ghcr package came out private, so a cluster couldn't pull it until it was made public by hand. With the package public, `cosign verify` against the policy's identity regex passed on the built image, which confirms the signature carries this repo's workflow identity. Admission on a cluster is not yet confirmed.
+**Status:** Accepted (2026-11-22). Verified end to end on a study-profile cluster: an app repo built, scanned, signed and pushed an image to ECR; the cluster admitted it and ran it, and refused an unsigned image from the same registry (see the last section).
 
 ## Context
 `apps/*.yaml` already deploys a folder of `WebService` files from another repo (`external-apps`). That covers the manifests, but not the image. The cluster only runs `ghcr.io/kushan94` images signed by a workflow in this repo (`verify-platform-images`), so an app repo that builds and signs its own image would be refused, and one that doesn't sign would need an exception.
@@ -53,3 +53,9 @@ Things to get right:
 
 ### What the first ECR run showed (2026-11-22)
 The first design stored the key in an `aws-build` environment limited to main, and the reusable workflow named that environment. The build failed at the AWS login with no credentials: environment secrets are not passed into a called workflow, even when its job names the environment. So the key is now a pair of repository secrets that the caller passes explicitly. That drops the branch limit on the key (and the need for the repo to be public). It is acceptable because the key can only push to that repo's own immutable-tag registry, and the cluster only runs an image there if the platform workflow signed it, which the workflow does only for the default branch. A person with write access to an app repo can push junk images, not deploy one.
+
+### Verified on a cluster (2026-11-22)
+- The WebService's `image: idp-apps/idp-sample-service:<commit>` became `<account>.dkr.ecr.eu-north-1.amazonaws.com/idp-apps/...` in the Deployment, and both pods pulled it and started.
+- Kyverno verified the signature on that image through the Pod Identity role: its log shows the cosign check on the ECR image. It also logs a harmless "Could not save cache" for the ECR credential helper, because the container's filesystem is read-only.
+- An unsigned image pushed to the same repository was denied by `verify-platform-images`, and the signed one was admitted (server-side dry runs). The test image was deleted afterwards.
+- Not tested: pulls on a Karpenter-launched node (the pods ran on the managed node group), and the production profile.
