@@ -121,9 +121,9 @@ Team namespaces, which Argo CD creates from `workloads/` and `apps/`, enforce:
 |---|---|
 | Restricted Pod Security: no root, no privilege escalation, capabilities dropped | Kubernetes Pod Security Admission |
 | Images have a version tag or digest, never `:latest` | Kyverno `disallow-latest-tag` |
-| Images come from `ghcr.io/kushan94`, `ghcr.io/stefanprodan`, `ghcr.io/cloudnative-pg` or `docker.io/nginxinc` | Kyverno `allowed-registries` |
+| Images come from `ghcr.io/kushan94`, `ghcr.io/stefanprodan`, `ghcr.io/cloudnative-pg`, `docker.io/nginxinc` or the platform's own ECR repositories (`idp-apps/<repo>`) | Kyverno `allowed-registries` |
 | Containers set CPU and memory requests and a memory limit | Kyverno `require-resources` |
-| `ghcr.io/kushan94` images are signed by this repo's workflows on main (cosign keyless) | Kyverno `verify-platform-images` |
+| `ghcr.io/kushan94` and `idp-apps/` ECR images are signed (cosign keyless) by this repo's `visits-image.yml` on main, or by `app-deploy.yml` at an `app-deploy-v<N>` release tag | Kyverno `verify-platform-images` |
 
 WebServices meet these by default. If an image names its user (such as `USER app`) instead of numbering it, set `runAsUser`. When a rule rejects a service, `kubectl get webservice` shows `SYNCED=False` and the condition says which rule and why. `make test` checks the policies against sample pods. See [ADR 0012](docs/adr/0012-guardrails.md).
 
@@ -199,7 +199,7 @@ make backstage  # http://localhost:3000
 
 Choose **Create > Web Service**, pick a runtime and fill in the form. Backstage opens a pull request that adds a `WebService` and a catalog entry, and Argo CD deploys it after you merge. Backstage shows the new entry in its catalog after the merge too.
 
-`make backstage` passes your GitHub CLI token to Backstage, and that token can reach all of your repositories. Guest sign-in and the allow-all permission policy are also on, so keep it on your own machine until milestone 3b.
+`make backstage` passes your GitHub CLI token to Backstage, and that token can reach all of your repositories. Guest sign-in and the allow-all permission policy are also on, so keep it on your own machine. The in-cluster Backstage uses GitHub sign-in, though its permission policy still allows everything to signed-in users ([ADR 0010](docs/adr/0010-backstage-in-cluster.md)).
 
 ## How changes are deployed
 Argo CD reads **commits**, not your working tree, so uncommitted changes have no effect. It checks for new commits about every 3 minutes.
@@ -227,7 +227,7 @@ colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
 - [x] **1. Local core:** Crossplane, Argo CD and the `WebService` API on kind
 - [x] **2. GitOps:** Argo CD deploys the platform and workloads from this repo
 - [x] **3. Backstage:** catalog, plus a template that opens a pull request, running locally
-- [ ] **3b. Backstage in the cluster:** container image, Postgres, GitHub sign-in *(built and tested locally)*
+- [x] **3b. Backstage in the cluster:** container image, Postgres, GitHub sign-in, running on EKS with two replicas in the production profile
 - [x] **4. AWS foundations:** account access, budget alerts, VPC and ECS cluster in Terraform, plus infrastructure and cluster pipelines
 - [x] **5. EKS:** the same platform on a Terraform-built cluster, with Crossplane using Pod Identity, and Argo CD reading private repos through a GitHub App
 - [x] **6. ECS runtime:** run `runtime: ecs` services on Fargate, managed from EKS
@@ -237,8 +237,9 @@ colima ssh -- sudo sysctl -w fs.inotify.max_user_instances=512
 - [x] **9. Guardrails:** Pod Security Admission, Kyverno CEL policies and keyless image signing
 - [x] **10. Metrics:** metrics-server, Prometheus, Grafana with GitHub login, a dashboard per service linked from Backstage, and alerts to chat
 - [ ] **10b. Tracing, cost and scaling:** OpenCost cost per service and CPU autoscaling are built, and Karpenter node autoscaling is built and verified, on-demand only ([ADR 0029](docs/adr/0029-karpenter-on-demand.md)); OpenTelemetry and KEDA remain
-- [ ] **12. Production hardening:** availability profile, backups and restore drills, logs, network isolation, environments and promotion, self-managed Argo CD *(built and tested offline and on kind; EKS verification pending)*
-- [ ] **11. Article:** publish the write-up
+- [x] **12. Production hardening:** availability profile, backups and restore drills, logs, network isolation, environments and promotion, self-managed Argo CD, verified on EKS with the production profile
+- [x] **13. Other repos:** an application repo deploys through the platform with a shared build workflow that scans, builds, signs and pushes to ECR ([ADR 0030](docs/adr/0030-app-repos.md))
+- [ ] **11. Article:** the write-up is drafted in [docs/articles](docs/articles/); publishing it is what's left
 
 ## Repo access and other repos
 Argo CD reads private repos through a GitHub App. The app's credentials live in AWS Secrets Manager, and External Secrets Operator turns them into an Argo CD credential template for every repo under `https://github.com/kushan94`. See [ADR 0007](docs/adr/0007-argocd-repo-access.md).
@@ -253,7 +254,7 @@ One-time setup:
      --secret-string file://$HOME/.config/eks-idp/github-app-secret.json
    ```
 
-To deploy a service from another repo, add a file to [`apps/`](apps/README.md).
+To deploy a service from another repo, add a file to [`apps/`](apps/README.md). The same page covers building the image in that repo with the shared `app-deploy.yml` workflow, which scans, builds, signs and pushes it to a private ECR repository, then commits the new tag so Argo CD deploys it.
 
 Teams are limited by the `workloads` Argo CD project. They can only create `WebService` resources, only outside the platform's own namespaces, and only from repos under the GitHub account.
 
@@ -291,7 +292,7 @@ Tick **enable_eks** when running the workflow to include the EKS cluster. Before
 One-time setup, from your laptop after `aws login`:
 
 ```sh
-make bootstrap     # S3 state bucket and the github-plan and github-apply IAM users
+make bootstrap     # S3 state bucket, the github-plan and github-apply IAM users, DNS, and an ECR repository and push-only key for each repo in apps/
 make github-setup  # GitHub environments and secrets, from the bootstrap outputs
 make tf-init       # Point your local Terraform at the same state
 ```
@@ -316,10 +317,12 @@ make platform-bootstrap gitops KUBE_CONTEXT=<EKS context> REPO_URL=https://githu
 make aws-environment KUBE_CONTEXT=<EKS context>
 # ...work...
 terraform -chdir=infra/terraform destroy -var enable_eks=true
-``` At the end of every session, run `terraform destroy` and confirm in the AWS console that nothing is left running.
+```
+
+At the end of every session, run `terraform destroy` and confirm in the AWS console that nothing is left running.
 
 ## Pinned versions
-Latest releases checked on 2026-11-03. Only the first six rows are used so far, and the Terraform has only been validated, not applied. The rest are for later milestones.
+Latest releases as of 2026-11-03, when the versions were chosen. All of them are in use and have run on EKS. The charts in `gitops/root/values.yaml` and the Terraform modules are the source of truth, so check there before relying on this table.
 
 | Tool | Version |
 |---|---|
@@ -370,6 +373,9 @@ Latest releases checked on 2026-11-03. Only the first six rows are used so far, 
 - [ADR 0023: Argo CD manages itself and External Secrets after bootstrap](docs/adr/0023-self-managed-argocd.md)
 - [ADR 0024: Limit where services can connect](docs/adr/0024-egress-policies.md)
 - [ADR 0025: Cost per service with OpenCost](docs/adr/0025-cost-per-service.md)
+- [ADR 0026: A cluster dashboard with a read-only AI assistant](docs/adr/0026-cluster-assistant.md)
+- [ADR 0027: Let a service set its resources and say how to check it is healthy](docs/adr/0027-resources-and-health-checks.md)
+- [ADR 0028: Start Backstage's replicas one at a time](docs/adr/0028-backstage-serialized-startup.md)
 - [ADR 0029: Karpenter for node autoscaling, on-demand only](docs/adr/0029-karpenter-on-demand.md)
 - [ADR 0030: Deploying from application repos with a shared build workflow](docs/adr/0030-app-repos.md)
 
