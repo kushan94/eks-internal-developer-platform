@@ -6,10 +6,13 @@ name: App deploy
 #   jobs:
 #     deploy:
 #       permissions: { contents: write, id-token: write }
-#       uses: kushan94/eks-internal-developer-platform/.github/workflows/app-deploy.yml@main
+#       uses: kushan94/eks-internal-developer-platform/.github/workflows/app-deploy.yml@app-deploy-v1
 #       secrets:
 #         AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
 #         AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#
+# Call it at a release tag, never at main: the tag is what the cluster's signing
+# policy accepts for this workflow, and it only changes when a release is cut.
 #
 # It lints and scans the image, pushes it to the platform's ECR registry as
 # idp-apps/<repo>:<commit>, signs it, and records the tag in the app repo's
@@ -57,9 +60,11 @@ permissions:
   contents: read
 
 jobs:
-  # Called by its full name, because a ./ path would look in the app repo.
+  # Called by its full name, because a ./ path would look in the app repo, and
+  # at the same release tag as this file, so the whole workflow is pinned. When
+  # releasing a new version, change this tag in the same commit that gets tagged.
   scan:
-    uses: kushan94/eks-internal-developer-platform/.github/workflows/quality-image.yml@main
+    uses: kushan94/eks-internal-developer-platform/.github/workflows/quality-image.yml@app-deploy-v1
     with:
       context: ${{ inputs.context }}
       file: ${{ inputs.file }}

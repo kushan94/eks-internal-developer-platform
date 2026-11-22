@@ -248,6 +248,8 @@ test: ## Render the WebService composition for each runtime, database class, pro
 	scripts/test-promote-branch.sh
 	@# The App deploy workflow's tag bump and its default-branch guard.
 	scripts/test-app-deploy.sh
+	@# Which workflow identities the signing policy trusts.
+	scripts/test-signing-identities.sh
 	@# Alloy's log pipeline must parse.
 	docker run --rm -v $(CURDIR):/repo -w /repo $(YQ_IMAGE) '.data["config.alloy"]' platform/observability/logs/alloy-config.yaml > .test/config.alloy
 	docker run --rm -v $(CURDIR)/.test:/w $(ALLOY_IMAGE) fmt /w/config.alloy > /dev/null

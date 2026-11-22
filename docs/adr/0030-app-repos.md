@@ -51,6 +51,15 @@ Things to get right:
 - ECR repositories need creating per app, and the nightly destroy must leave their images alone.
 - Both registries have to be allowed during the move, because the Backstage and visits images stay where they are.
 
+### Pinning callers to a release tag (2026-11-22)
+Follow-up 1 is done. Callers use `app-deploy.yml@app-deploy-v1` instead of `@main`, and the signing policy now accepts the workflow only at a tag like `app-deploy-v<N>` (and the platform's own `visits-image.yml` on main). A change merged to main therefore reaches no app until a tag is cut, and an image signed through `@main` is refused. `scripts/test-signing-identities.sh` checks the policy's expressions against trusted and untrusted identities, and a mutation of each expression was caught.
+- **Why a tag and not a SHA:** the signature records the ref written in the caller's `uses:`, so a tag gives a readable, matchable identity; a SHA would need a policy change per release.
+- **The scan is pinned too.** `app-deploy.yml` calls `quality-image.yml` at its own tag, so a release covers both files.
+- **To release version N+1:** in a pull request, change the nested `quality-image.yml@app-deploy-vN` reference to `app-deploy-v(N+1)`, merge, tag the merge commit `app-deploy-v(N+1)`, then update the callers. The policy already accepts any `app-deploy-v<number>`. Old tags stay trusted until the regex is narrowed, so a vulnerable release should be removed from it.
+- **Tags can be moved or deleted by anyone with push access,** so a ruleset that blocks updates and deletion of `app-deploy-v*` tags is part of the release process (see below).
+- **If the assistant returns,** its image workflow's name has to be added to the policy, because main is no longer trusted for every workflow.
+- **Follow-up 2 (require review under `.github/workflows/`) isn't possible here.** Required review needs a second approver, and this is a personal repository with one maintainer, who can't approve their own pull request. A CODEOWNERS file would only ask for a review that nothing enforces. The tag pinning is what limits the damage instead. With a second maintainer, or an organization, add the rule.
+
 ### What the first ECR run showed (2026-11-22)
 The first design stored the key in an `aws-build` environment limited to main, and the reusable workflow named that environment. The build failed at the AWS login with no credentials: environment secrets are not passed into a called workflow, even when its job names the environment. So the key is now a pair of repository secrets that the caller passes explicitly. That drops the branch limit on the key (and the need for the repo to be public). It is acceptable because the key can only push to that repo's own immutable-tag registry, and the cluster only runs an image there if the platform workflow signed it, which the workflow does only for the default branch. A person with write access to an app repo can push junk images, not deploy one.
 
